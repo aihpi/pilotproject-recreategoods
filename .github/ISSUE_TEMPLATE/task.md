@@ -6,7 +6,7 @@ labels: small goal
 assignees: ''
 
 ---
-## **Related to:** [Provide the Feature URL here](url)
+## **Related to Feature:** [Provide the Feature URL here](url)
 
 ## What we want
 (Fill this)
