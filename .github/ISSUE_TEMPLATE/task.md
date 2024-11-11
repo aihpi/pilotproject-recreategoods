@@ -2,7 +2,7 @@
 name: Task
 about: Work on a task from a feature
 title: "[TASK]"
-labels: small goal
+labels: new
 assignees: ''
 
 ---
