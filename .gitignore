@@ -1,3 +1,12 @@
+*.jpg
+*.pt
+*.json
+*.jsonl
+pix2pix/data/
+_*.*
+*.pem
+/pix2pix/flux/output
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
