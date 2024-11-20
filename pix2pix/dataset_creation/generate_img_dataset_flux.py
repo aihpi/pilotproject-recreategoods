@@ -1,3 +1,5 @@
+from os import environ
+environ["CUDA_VISIBLE_DEVICES"] = "0"
 import argparse
 import json
 import sys
@@ -36,6 +38,13 @@ def to_pil(
     img = Image.fromarray((127.5 * (x + 1.0)).cpu().byte().numpy())
     return img
 
+def get_ancestral_step(sigma_from, sigma_to, noise_factor=0.3):
+    """Calculates the noise level (sigma_down) to step down to and the amount
+    of noise to add (sigma_up) when doing an ancestral sampling step."""
+    sigma_up = noise_factor * min(sigma_to, (sigma_to**2 * (sigma_from**2 - sigma_to**2) / sigma_from**2) ** 0.5)
+    sigma_down = (sigma_to**2 - sigma_up**2) ** 0.5
+    return sigma_down, sigma_up
+
 def denoise(
     model: Flux,
     # model input
@@ -49,12 +58,6 @@ def denoise(
     prompt_to_prompt: bool = False,
     p2p_threshold: float = 0.2,  # Portion of timesteps to apply P2P
 ):
-    # if prompt_to_prompt:
-    #     total_modifications = sum(
-    #         1 for i in range(len(timesteps) - 1)
-    #         if (len(timesteps) - 1) != 0 and p2p_threshold > (len(timesteps) - 2 - i) / (len(timesteps) - 1)
-    #     )
-    #     print(f"\n Number of prompt to prompt modifications: {total_modifications} \n")
     for i, (t_curr, t_prev) in enumerate(zip(timesteps[:-1], timesteps[1:])):
         t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)
         
@@ -66,7 +69,9 @@ def denoise(
             for module in model.modules():
                 if isinstance(module, DoubleStreamBlock):
                     module.prompt_to_prompt = True
+                    module.p2p_strength = 0.6
         
+        # Predict the noise
         pred = model(
             img=img,
             img_ids=img_ids,
@@ -81,8 +86,18 @@ def denoise(
             for module in model.modules():
                 if isinstance(module, DoubleStreamBlock):
                     module.prompt_to_prompt = False
+                    module.p2p_strength = None
 
-        img = img + (t_prev - t_curr) * pred
+        # Calculate the noise levels for Euler's method
+        sigma_down, sigma_up = get_ancestral_step(t_curr, t_prev)
+        dt = sigma_down - t_curr
+        
+        # Euler update: deterministic step
+        img = img + dt * pred
+        
+        # Add stochastic noise if applicable
+        if t_prev > 0:
+            img = img + torch.randn_like(img) * sigma_up
 
     return img
 
@@ -90,12 +105,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out_dir", type=str, required=True, help="Path to output dataset directory.")
     parser.add_argument("--prompts_file", type=str, required=True, help="Path to prompts .jsonl file.")
-    parser.add_argument("--steps", type=int, default=50, help="Number of sampling steps.")
+    parser.add_argument("--steps", type=int, default=15, help="Number of sampling steps.")
     parser.add_argument("--n-samples", type=int, default=100, help="Number of samples to generate per prompt.")
     parser.add_argument("--max-out-samples", type=int, default=4, help="Max number of output samples to save per prompt.")
-    parser.add_argument("--clip-threshold", type=float, default=0.2, help="CLIP threshold for text-image similarity.")
-    parser.add_argument("--clip-dir-threshold", type=float, default=0.2, help="CLIP threshold for directional similarity.")
-    parser.add_argument("--clip-img-threshold", type=float, default=0.7, help="CLIP threshold for image-image similarity.")
+    parser.add_argument("--clip-threshold", type=float, default=0.1, help="CLIP threshold for text-image similarity.")
+    parser.add_argument("--clip-dir-threshold", type=float, default=0.1, help="CLIP threshold for directional similarity.")
+    parser.add_argument("--clip-img-threshold", type=float, default=0.6, help="CLIP threshold for image-image similarity.")
     parser.add_argument("--n-partitions", type=int, default=1, help="Number of total partitions.")
     parser.add_argument("--partition", type=int, default=0, help="Partition index.")
     parser.add_argument("--min-p2p", type=float, default=0.2, help="Min prompt2prompt threshold.")
@@ -130,9 +145,6 @@ def main():
             with open(prompt_dir.joinpath("prompt.json"), "w") as fp:
                 json.dump(prompt, fp)
 
-            # cond = t5([prompt["input"], prompt["output"]])
-            # uncond = t5(2 * [""])
-
             results = {}
             with tqdm(total=opt.n_samples, desc="Samples") as progress_bar:
                 while len(results) < opt.n_samples:
@@ -143,7 +155,6 @@ def main():
 
                     # Generate initial noise
                     x = get_noise(2, height, width, device=device, dtype=torch.bfloat16, seed=seed)
-                    # x = repeat(x, "1 ... -> n ...", n=2)
                     if offload:
                         ae = ae.cpu()
                         torch.cuda.empty_cache()
@@ -189,7 +200,7 @@ def main():
                 and result["clip_sim_0"] >= opt.clip_threshold
                 and result["clip_sim_1"] >= opt.clip_threshold
             ]
-            print(f"\n METADATA: {metadata}")
+
             metadata.sort(reverse=True)
             for _, seed in metadata[: opt.max_out_samples]:
                 result = results[seed]

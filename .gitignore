@@ -6,7 +6,7 @@ pix2pix/data/
 _*.*
 *.pem
 /pix2pix/flux/output
-
+/logs/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
