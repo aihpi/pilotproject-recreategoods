@@ -133,6 +133,9 @@ class DoubleStreamBlock(nn.Module):
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         self.num_heads = num_heads
         self.hidden_size = hidden_size
+        self.prompt_to_prompt = False
+        self.p2p_strength = None
+
         self.img_mod = Modulation(hidden_size, double=True)
         self.img_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.img_attn = SelfAttention(dim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias)
@@ -177,9 +180,24 @@ class DoubleStreamBlock(nn.Module):
         q = torch.cat((txt_q, img_q), dim=2)
         k = torch.cat((txt_k, img_k), dim=2)
         v = torch.cat((txt_v, img_v), dim=2)
-
         attn = attention(q, k, v, pe=pe)
         txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
+
+        if self.prompt_to_prompt:
+            assert txt.size(0) == 2, "Batch size must be 2 for this implementation."
+            
+            # Blending factor: range between 0 and 1 
+            p2p_strength = self.p2p_strength if self.p2p_strength is not None else 0.5
+
+            # Modify text attention
+            txt_attns = txt_attn.chunk(2, dim=0)  # Split the attention tensor into two parts
+            blended_txt_attn = p2p_strength * txt_attns[0] + (1 - p2p_strength) * txt_attns[1]
+            txt_attn = torch.cat((txt_attns[0], blended_txt_attn), dim=0)
+
+            # Modify image attention in a similar manner
+            img_attns = img_attn.chunk(2, dim=0)  # Split the image attention tensor
+            blended_img_attn = p2p_strength * img_attns[0] + (1 - p2p_strength) * img_attns[1]
+            img_attn = torch.cat((img_attns[0], blended_img_attn), dim=0)
 
         # calculate the img bloks
         img = img + img_mod1.gate * self.img_attn.proj(img_attn)
