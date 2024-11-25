@@ -26,11 +26,14 @@ def validate_edited_caption(example, pred, trace=None):
     edited = f"The text should be the edited version of the original text: `{example.caption}`, edited with this instruction: `{example.edit_instruction}`. Is the assessed text edited according to the instruction?"
     consistent = f"Is the result consistent with the original description: `{example.caption}`, excpet the edited part: `{example.edit_instruction}`? Are all other details wich are not releated to the edit instructions still present in the assessed text?"
     
-    edited =  dspy.Predict(Assess)(assessed_text=pred.edited_caption, assessment_question=edited)
-    consistent = dspy.Predict(Assess)(assessed_text=pred.edited_caption, assessment_question=consistent)
+    edited =  dspy.ChainOfThought(Assess)(assessed_text=pred.edited_caption, assessment_question=edited)
+    consistent = dspy.ChainOfThought(Assess)(assessed_text=pred.edited_caption, assessment_question=consistent)
 
     print(edited)
     print(consistent)
+
+    edited, consistent = [m.assessment_answer for m in [edited, consistent]]
+    score = edited + consistent
 
     return score
 
