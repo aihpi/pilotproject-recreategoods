@@ -1,0 +1,197 @@
+[
+    {
+        "original_caption": "A soft grey knit sweater with long, loose-fitting sleeves, a crew neckline, and ribbed cuffs and hem. The sweater drapes slightly over the hips, giving a relaxed silhouette.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into a deep V.",
+        "resulting_caption": "A cropped grey knit sweater with long, loose-fitting sleeves, a deep V-neckline, and ribbed cuffs and hem."
+    },
+    {
+        "original_caption": "A plain white cotton T-shirt with short sleeves, a round neckline, and a straight hem. The T-shirt is slightly oversized, with minimal stitching visible at the seams.",
+        "edit_instruction": "Add ruched side ties for an adjustable fit and create a curved hem.",
+        "resulting_caption": "A slightly oversized white cotton T-shirt with short sleeves, a round neckline, a curved hem, and ruched side ties."
+    },
+    {
+        "original_caption": "A navy fleece zip-up hoodie with long sleeves, a front kangaroo pocket, and ribbed cuffs. The hoodie has a drawstring hood and a relaxed fit that extends below the hips.",
+        "edit_instruction": "Remove the sleeves to create a sleeveless vest and replace the kangaroo pocket with two front patch pockets.",
+        "resulting_caption": "A navy fleece zip-up sleeveless vest with a drawstring hood, ribbed trims, and two front patch pockets."
+    },
+    {
+        "original_caption": "A structured white button-up shirt with long sleeves, a pointed collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a pointed collar, a single chest pocket, crisp vertical pleats, and a cinched waist with elastic darts."
+    },
+    {
+        "original_caption": "A soft pastel pink sweater with short, tight-fitting sleeves, a crew neckline, and ribbed cuffs and hem. The sweater drapes snugly around the body, giving a fitted silhouette.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into an asymmetrical scoop neck.",
+        "resulting_caption": "A cropped pastel pink knit sweater with short tight-fitting sleeves, an asymmetrical scoop neckline, and ribbed cuffs and hem."
+    },
+    {
+        "original_caption": "A simple white denim jacket with long sleeves, a flat front pocket, and a straight hem. The jacket has a relaxed fit that extends below the hips.",
+        "edit_instruction": "Add functional pockets on either side of the waistband for organization.",
+        "resulting_caption": "A slightly oversized white cotton denim jacket with short sleeves, a flat front pocket, a curved hem, and two functional side pockets."
+    },
+    {
+        "original_caption": "A navy blue crew-neck t-shirt with long sleeves, a round neckline, and a straight hem. The T-shirt is fitted through the body, with minimal visible seams.",
+        "edit_instruction": "Shorten the hemline into a cropped style and replace the round neckline with a rounded scoop neck.",
+        "resulting_caption": "A cropped navy blue crew-neck shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A black wool cardigan sweater with short sleeves, a crew neckline, and ribbed cuffs and hem. The sweater has a fitted silhouette and a subtle cable knit pattern.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped black wool sweater with short sleeves, an angled V-neckline, and ribbed cuffs and hem."
+    },
+    {
+        "original_caption": "A fitted white button-down shirt with long sleeves, a pointed collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a pointed collar, a single chest pocket, crisp vertical pleats, and a cinched waist with elastic darts."
+    },
+    {
+        "original_caption": "A flowy grey maxi dress with a straight hemline, a V-neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate brooch at the neckline.",
+        "resulting_caption": "A cropped grey flowy maxi dress with short sleeves, an asymmetrical V-neckline, a curved hem, and two decorative straps."
+    },
+    {
+        "original_caption": "A fitted navy blue sweatshirt with short sleeves, a crew neckline, and ribbed cuffs. The sweatshirt has a relaxed fit that extends below the hips.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped navy blue sweatshirt with short sleeves, an angled V-neckline, and ribbed cuffs."
+    },
+    {
+        "original_caption": "A structured white button-down shirt with long sleeves, a round collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a round collar, a single chest pocket, crisp vertical pleats, and a cinched waist with elastic darts."
+    },
+    {
+        "original_caption": "A flowy red sundress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped red flowy sundress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted black leather jacket with short sleeves, a flat front pocket, and a straight hem. The jacket has a sleek fit that extends below the hips.",
+        "edit_instruction": "Add functional pockets on either side of the waistband for organization.",
+        "resulting_caption": "A slightly oversized black cotton leather jacket with short sleeves, a flat front pocket, a curved hem, and two functional side pockets."
+    },
+    {
+        "original_caption": "A fitted white blouse with long sleeves, a round neckline, and ribbed cuffs. The blouse has a relaxed fit that extends below the hips.",
+        "edit_instruction": "Crop the blouse at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped white blouse with long sleeves, a round collar, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy blue maxi dress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped blue flowy maxi dress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted navy blue crew-neck t-shirt with long sleeves, a round collar, and a straight hemline. The T-shirt has a fitted silhouette that extends below the hips.",
+        "edit_instruction": "Crop the shirt at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped navy blue crew-neck shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A structured white button-down shirt with long sleeves, a round collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a round collar, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy yellow sundress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped yellow flowy sundress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted black cardigan sweater with long sleeves, a flat front pocket, and a straight hem. The sweater has a relaxed fit that extends below the hips.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped black wool sweater with short sleeves, an angled V-neckline, and ribbed cuffs."
+    },
+    {
+        "original_caption": "A fitted white button-down shirt with long sleeves, a rounded collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy pink sundress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped pink flowy sundress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted navy blue crew-neck t-shirt with long sleeves, a rounded collar, and a straight hemline. The T-shirt has a fitted silhouette that extends below the hips.",
+        "edit_instruction": "Crop the shirt at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped navy blue crew-neck shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A structured white button-down shirt with long sleeves, a round collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy blue maxi dress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped blue flowy maxi dress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted navy blue crew-neck t-shirt with long sleeves, a rounded collar, and a straight hemline. The T-shirt has a fitted silhouette that extends below the hips.",
+        "edit_instruction": "Crop the shirt at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped navy blue crew-neck shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy yellow sundress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped yellow flowy sundress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted black cardigan sweater with long sleeves, a flat front pocket, and a straight hem. The sweater has a relaxed fit that extends below the hips.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped black wool sweater with short sleeves, an angled V-neckline, and ribbed cuffs."
+    },
+    {
+        "original_caption": "A fitted white button-down shirt with long sleeves, a rounded collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy blue maxi dress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped blue flowy maxi dress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted navy blue crew-neck t-shirt with long sleeves, a rounded collar, and a straight hemline. The T-shirt has a fitted silhouette that extends below the hips.",
+        "edit_instruction": "Crop the shirt at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped navy blue crew-neck shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A structured white button-down shirt with long sleeves, a round collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy pink sundress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped pink flowy sundress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted black cardigan sweater with long sleeves, a flat front pocket, and a straight hem. The sweater has a relaxed fit that extends below the hips.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped black wool sweater with short sleeves, an angled V-neckline, and ribbed cuffs."
+    },
+    {
+        "original_caption": "A fitted white button-down shirt with long sleeves, a rounded collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy blue maxi dress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped blue flowy maxi dress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    },
+    {
+        "original_caption": "A fitted navy blue crew-neck t-shirt with long sleeves, a rounded collar, and a straight hemline. The T-shirt has a fitted silhouette that extends below the hips.",
+        "edit_instruction": "Crop the shirt at the waist and reshape the neckline into an angled V.",
+        "resulting_caption": "A cropped navy blue crew-neck shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A structured white button-down shirt with long sleeves, a round collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a rounded scoop neckline, a curved hem, and a cropped length."
+    },
+    {
+        "original_caption": "A flowy yellow sundress with a straight hemline, a round neckline, and bell-shaped sleeves. The dress has adjustable straps and a subtle floral pattern.",
+        "edit_instruction": "Remove the shoulder pads to create a relaxed fit and add a delicate lace trim at the neckline.",
+        "resulting_caption": "A cropped yellow flowy sundress with short sleeves, an asymmetrical round neckline, a curved hem, and two decorative straplets."
+    }
+]

@@ -1,7 +1,8 @@
 import dspy
 import pandas as pd
 
-lm = dspy.LM('ollama_chat/llama3.2:1b', api_base='http://localhost:11434', api_key='')
+# llama3.2:1b, llama3.1:8b, qwen2.5:14b
+lm = dspy.LM('ollama_chat/qwen2.5:14b', api_base='http://localhost:11434', api_key='')
 dspy.configure(lm=lm)
 
 module = dspy.ChainOfThought("caption, edit_instruction -> edited_caption")
@@ -31,10 +32,7 @@ def validate_edited_caption(example, pred, trace=None):
     print(f"\nIs edited: {edited.assessment_answer}\n{edited.reasoning}")
     print(f"\nIs consistent: {consistent.assessment_answer}\n{consistent.reasoning}")
 
-    edited, consistent = [m.assessment_answer for m in [edited, consistent]]
-    score = edited + consistent
-
-    return score
+    return edited, consistent
 
 examples_df = pd.read_csv('examples.csv')
 
@@ -47,10 +45,33 @@ for _, row in examples_df.iterrows():
     ).with_inputs("caption", "edit_instruction")
     examples.append(example)
 
+results = []
 scores = []
 for x in examples:
     pred = generate_edited_caption(**x.inputs())
-    score = validate_edited_caption(x, pred)
+    edited_assessment, consistent_assessment = validate_edited_caption(x, pred)
+
+    edited, consistent = [m.assessment_answer for m in [edited_assessment, consistent_assessment]]
+    score = edited + consistent
     scores.append(score)
+    
+    # Append results to each example
+    result_row = {
+        'caption': x.caption,
+        'edit_instruction': x.edit_instruction,
+        'edited_caption': x.edited_caption,
+        'llm edit': pred.edited_caption,
+        'score': score,
+        'is edited': edited_assessment.assessment_answer,
+        'is edited: reason': edited_assessment.reasoning,
+        'is consistent': consistent_assessment.assessment_answer, 
+        'is consistent: reason': consistent_assessment.reasoning
+    }
+    results.append(result_row)
+
+# Write results to a new CSV file
+results_df = pd.DataFrame(results)
+results_df.to_csv('results.csv', index=False)
+
 
 print(f"\n{scores}\n")
