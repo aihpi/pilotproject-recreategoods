@@ -88,10 +88,13 @@ if __name__ == "__main__":
         few_shot_examples_str = ""
         for example in few_shot_examples:
             try:
-                input_str = example["question"]
-                output_str = example["answer"]
+                original_caption_str = example["original_caption"]
+                edit_instruction_str = example["edit_instruction"]
+                resulting_caption_str = example["resulting_caption"]
                 few_shot_examples_str += (
-                    f"Question: {input_str}\nExpected Answer: {output_str}\n\n"
+                    f"Original Caption: {original_caption_str}\n"
+                    f"Edit Instruction: {edit_instruction_str}\n"
+                    f"Resulting Caption: {resulting_caption_str}\n\n"
                 )
             # pylint: disable=broad-exception-caught
             except Exception as e:
