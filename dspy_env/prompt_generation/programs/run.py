@@ -2,6 +2,7 @@ import json
 import dspy
 from loguru import logger
 from dotenv import find_dotenv, load_dotenv
+
 from prompt_generation.programs.step1_bootstrap_few_shot.program import (
     Step1BootstrapFewShotModule
 )
@@ -12,7 +13,7 @@ from prompt_generation.programs.step3_generate_final_prompt.program import (
     Step3GenerateFinalPromptModule
 )
 
-_ = load_dotenv(find_dotenv())
+# _ = load_dotenv(find_dotenv())
 
 # llama3.2:1b, llama3.1:8b, qwen2.5:14b
 lm = dspy.LM('ollama_chat/llama3.2:1b', api_base='http://localhost:11434', api_key='')
