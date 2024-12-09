@@ -2,8 +2,8 @@
 import requests
 import json
 
-# llama3.2:1b, llama3.1:8b, qwen2.5:14b, qwen3.5:7b
-def send_prompt_to_ollama(prompt, model="llama3.2:1b"):
+# llama3.2:1b, llama3.1:8b, qwen2.5:14b
+def send_prompt_to_ollama(prompt, model="qwen2.5:14b"):
     url = "http://localhost:11434/api/generate"
     
     payload = {
@@ -93,3 +93,44 @@ print(result)
 
 # # Print the result
 # print(processed_groups)
+
+#######
+# # Define a function to create an object
+# def create_object(obj):
+#     # Create a dictionary from the input string
+#     obj_dict = {'original': obj['original_caption'], 
+#                 'edit_instruction': obj['edit_instruction'],
+#                 'resulting': obj['resulting_caption']}
+    
+#     return obj_dict
+
+# # Apply the function to each element in the list
+# new_list = [create_object(obj) for obj in garment_list]
+
+# print(new_list)
+
+# # Define a function to calculate the difference between two lists
+# def list_difference(list1, list2):
+#     # Use set differences to find elements that are in one list but not the other
+#     diff_set = set(list1) - set(list2)
+    
+#     # Convert the set back into a list and return it
+#     return list(diff_set)
+
+# # Define a function to calculate the similarity between two lists
+# def list_similarity(list1, list2):
+#     # Use set intersections to find elements that are in both lists
+#     sim_set = set(list1) & set(list2)
+    
+#     # Convert the set back into a list and return it
+#     return list(sim_set)
+
+# # Calculate the difference between the two lists
+# diff_list = list_difference(new_list, new_list[:5])
+
+# print(diff_list)
+
+# # Calculate the similarity between the two lists
+# sim_list = list_similarity(new_list, new_list[:5])
+
+# print(sim_list)
