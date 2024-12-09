@@ -33,26 +33,26 @@ Lila Verona, a sustainable fashion designer, reworks leftover garments into styl
 
 Examples:
 [
-  {
-    "original_caption": "A soft grey knit sweater with long, loose-fitting sleeves, a crew neckline, and ribbed cuffs and hem. The sweater drapes slightly over the hips, giving a relaxed silhouette.",
-    "edit_instruction": "Crop the sweater at the waist and reshape the neckline into a deep V.",
-    "resulting_caption": "A cropped grey knit sweater with long, loose-fitting sleeves, a deep V-neckline, and ribbed cuffs and hem."
-  },
-  {
-    "original_caption": "A plain white cotton T-shirt with short sleeves, a round neckline, and a straight hem. The T-shirt is slightly oversized, with minimal stitching visible at the seams.",
-    "edit_instruction": "Add ruched side ties for an adjustable fit and create a curved hem.",
-    "resulting_caption": "A slightly oversized white cotton T-shirt with short sleeves, a round neckline, a curved hem, and ruched side ties."
-  },
-  {
-    "original_caption": "A navy fleece zip-up hoodie with long sleeves, a front kangaroo pocket, and ribbed cuffs. The hoodie has a drawstring hood and a relaxed fit that extends below the hips.",
-    "edit_instruction": "Remove the sleeves to create a sleeveless vest and replace the kangaroo pocket with two front patch pockets.",
-    "resulting_caption": "A navy fleece zip-up sleeveless vest with a drawstring hood, ribbed trims, and two front patch pockets."
-  },
-  {
-    "original_caption": "A structured white button-up shirt with long sleeves, a pointed collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
-    "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
-    "resulting_caption": "A cropped white button-up shirt with long sleeves, a pointed collar, a single chest pocket, crisp vertical pleats, and a cinched waist with elastic darts."
-  }
+    {
+        "original_caption": "A soft grey knit sweater with long, loose-fitting sleeves, a crew neckline, and ribbed cuffs and hem. The sweater drapes slightly over the hips, giving a relaxed silhouette.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into a deep V.",
+        "resulting_caption": "A cropped grey knit sweater with long, loose-fitting sleeves, a deep V-neckline, and ribbed cuffs and hem. The sweater drapes slightly over the hips, giving a relaxed silhouette."
+    },
+    {
+        "original_caption": "A plain white cotton T-shirt with short sleeves, a round neckline, and a straight hem. The T-shirt is slightly oversized, with minimal stitching visible at the seams.",
+        "edit_instruction": "Add ruched side ties for an adjustable fit and create a curved hem.",
+        "resulting_caption": "A plain white cotton T-shirt with short sleeves, a round neckline, a curved hem, and ruched side ties. The T-shirt is slightly oversized, with minimal stitching visible at the seams."
+    },
+    {
+        "original_caption": "A navy fleece zip-up hoodie with long sleeves, a front kangaroo pocket, and ribbed cuffs. The hoodie has a drawstring hood and a relaxed fit that extends below the hips.",
+        "edit_instruction": "Remove the sleeves to create a sleeveless vest and replace the kangaroo pocket with two front patch pockets.",
+        "resulting_caption": "A navy fleece zip-up sleeveless vest, and two front patch pockets. The vest has a drawstring hood and a relaxed fit that extends below the hips."
+    },
+    {
+        "original_caption": "A structured white button-up shirt with long sleeves, a pointed collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "A cropped white button-up shirt with long sleeves, a pointed collar, and a cinched waist with elastic darts. The shirt has a single chest pocket and crisp vertical pleats along the front."
+    }
 ]
 
 Task Directive:

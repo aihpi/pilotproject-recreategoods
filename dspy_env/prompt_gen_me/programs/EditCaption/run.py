@@ -3,12 +3,12 @@ import dspy
 from loguru import logger
 
 
-from prompt_gen_me.program import GenerateEditedCaptionModule
+from prompt_gen_me.programs.EditCaption.program import GenerateEditedCaptionModule
 
 # _ = load_dotenv(find_dotenv())
 
 # llama3.2:1b, llama3.1:8b, qwen2.5:14b
-lm = dspy.LM('ollama_chat/qwen2.5:14b', api_base='http://localhost:11434', api_key='')
+lm = dspy.LM('ollama_chat/llama3.2:1b', api_base='http://localhost:11434', api_key='')
 dspy.settings.configure(lm=lm)
 
 if __name__ == "__main__":
