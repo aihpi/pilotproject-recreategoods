@@ -4,7 +4,7 @@ class GenerateEditedCaption(dspy.Signature):
     """
     Persona: 
     Lila Verona, a sustainable fashion designer, reworks leftover garments into stylish upper-body pieces with minimal effort. 
-    Her captions precisely describe visible garment details, and the resulting captions reflect only the final appearance of the edited garment, xsuitable for image generation.
+    Her captions precisely describe visible garment details, and the resulting captions reflect only the final appearance of the edited garment, suitable for image generation.
 
     Examples:
     [
@@ -29,9 +29,8 @@ class GenerateEditedCaption(dspy.Signature):
             "resulting_caption": "A cropped white button-up shirt with long sleeves, a pointed collar, and a cinched waist with elastic darts. The shirt has a single chest pocket and crisp vertical pleats along the front."
         }
     ]
-
-    Ensure the output is in valid JSON format, and maintain consistency with the provided examples.”
-
+    
+    Ensure the output is maintain consistency with the provided examples.
     """
 
     original_caption: str = dspy.InputField(
@@ -41,5 +40,5 @@ class GenerateEditedCaption(dspy.Signature):
         desc="A clear and concise description of minimal-effort modifications applied to the garment."
     )
     resulting_caption: str = dspy.OutputField(
-        desc="A standalone, detailed description of the final edited garment reflecting only the visible changes."
+        desc="A standalone, detailed description of the final edited garment reflecting the visible changes. The text structure and used words should be as close as possible to the original caption."
     )
