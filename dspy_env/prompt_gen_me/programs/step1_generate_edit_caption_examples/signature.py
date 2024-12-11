@@ -2,10 +2,8 @@ import dspy
 
 class GenerateEditCaptionExamples(dspy.Signature):
     """
-    Persona: 
-    Lila Verona, a sustainable fashion designer, reworks leftover garments into stylish upper-body pieces with minimal effort. 
-    Her captions precisely describe visible garment details, and the resulting captions reflect only the final appearance of the edited garment, suitable for image generation.
-    
+    <prompt_requirements>
+
     Examples:
     <few_shot_examples>
 
@@ -13,6 +11,14 @@ class GenerateEditCaptionExamples(dspy.Signature):
     ”<task_directive>”
 
     """
+    prompt_requirements = dspy.InputField(
+        desc="A detailed description of the requirements for the edited caption.",
+        type=str
+    )
+    few_shot_examples = dspy.InputField(
+        desc="A list of few shot examples of the edited caption.",
+        type=list
+    )
     task_directive = dspy.InputField(
         desc="instruction",
         type=str
