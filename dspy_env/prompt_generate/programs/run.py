@@ -4,9 +4,9 @@ from loguru import logger
 import pandas as pd
 import argparse
 
-from prompt_gen_me.programs.step0_generate_edited_caption.program import GenerateEditedCaptionModule
-from prompt_gen_me.programs.step1_generate_edit_caption_examples.program import GenerateEditCaptionExamplesModule
-from prompt_gen_me.programs.step2_asses_generated_edit_caption_examples.program import ValidateEditedCaptionModule
+from prompt_generate.programs.step0_generate_edited_caption.program import GenerateEditedCaptionModule
+from prompt_generate.programs.step1_generate_edit_caption_examples.program import GenerateEditCaptionExamplesModule
+from prompt_generate.programs.step2_asses_generated_edit_caption_examples.program import ValidateEditedCaptionModule
 
 # _ = load_dotenv(find_dotenv())
 
@@ -22,7 +22,7 @@ args = parser.parse_args()
 fewshot = args.fewshot
 input = args.input
 
-data_dir = "prompt_gen_me/data"
+data_dir = "prompt_generate/data"
 
 if __name__ == "__main__":
 
