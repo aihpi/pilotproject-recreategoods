@@ -33,5 +33,5 @@ class GenerateEditedCaptionModule(dspy.Module):
             prompt_requirements=self.prompt_requirements,
             few_shot_examples=self.few_shot_examples
         )
-
-        return result.resulting_caption
+        print(f"\n\n{self.original_caption}\n{result['resulting_caption']}\n{self.edit_instruction}")
+        return result['resulting_caption']

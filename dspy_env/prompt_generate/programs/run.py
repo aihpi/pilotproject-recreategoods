@@ -1,14 +1,14 @@
-import json
 import dspy
 from loguru import logger
 import pandas as pd
 import argparse
 
-from prompt_generate.programs.step0_generate_edited_caption.program import GenerateEditedCaptionModule
-from prompt_generate.programs.step1_generate_edit_caption_examples.program import GenerateEditCaptionExamplesModule
-from prompt_generate.programs.step2_asses_generated_edit_caption_examples.program import ValidateEditedCaptionModule
+from prompt_generate.programs.personas import personas
 
-# _ = load_dotenv(find_dotenv())
+from prompt_generate.programs.step0_generate_original_captions.program import GenerateOriginalCaptionsModule
+from prompt_generate.programs.step1_generate_edit_instructions.program import GenerateEditInstructionsModule
+from prompt_generate.programs.step2_generate_edited_caption.program import GenerateEditedCaptionModule
+from prompt_generate.programs.step3_asses_generated_edit_caption_examples.program import ValidateEditedCaptionModule
 
 # llama3.2:1b, llama3.1:8b, qwen2.5:14b
 lm = dspy.LM('ollama_chat/qwen2.5:14b', api_base='http://localhost:11434', api_key='')
@@ -25,6 +25,30 @@ input = args.input
 data_dir = "prompt_generate/data"
 
 if __name__ == "__main__":
+
+    unique_original_captions = set()
+        
+    for persona in personas:
+        module = GenerateOriginalCaptionsModule(persona)
+        original_captions = module.forward()
+        num_before = len(unique_original_captions)
+        unique_original_captions.update(original_captions)
+        num_after = len(unique_original_captions)
+        logger.info(f"Added {num_after - num_before} new captions")
+
+    logger.info(f"Total unique original captions: {len(unique_original_captions)}")
+
+    captions_and_instructions = []
+    for caption in unique_original_captions:
+        print(f"\n{caption}")
+        module = GenerateEditInstructionsModule(caption)
+        edit_instructions = module.forward()
+        for instruction in edit_instructions:
+            print(instruction)
+            captions_and_instructions.append({
+                'original_caption': caption,
+                'edit_instruction': instruction
+            })
 
     prompt_requirements = """
         Persona: 
@@ -48,38 +72,22 @@ if __name__ == "__main__":
     with open(fewshot_file, "r", encoding="utf-8") as f:
         few_shot_examples = f.read()
 
-    task_directive = """
-        Generate 5 new examples in the following JSON format. Each example should include:
-        1.	original_caption: A detailed description of the upper-body garment’s visible features.
-        2.	edit_instruction: A clear and concise description of minimal-effort modifications applied to the garment.
-        3.	resulting_caption: A standalone, detailed description of the final edited garment reflecting visible changes. Ensure clarity, completeness, and consistency.”.
-
-        Ensure the output is in valid JSON format, and maintain consistency with the provided examples.
-        No combination of original_caption and edit_instruction should be repeated.
-    """
-
-    if input:
-        input_file = f"{data_dir}/{input}"
-        logger.info(f"Loading input examples from {input_file}")
-        with open(input_file, "r", encoding="utf-8") as f:
-            generated_examples = [dspy.Example(**example) for example in json.loads(f.read())]
-        for example in generated_examples:
-            module = GenerateEditedCaptionModule(example.original_caption, example.edit_instruction, prompt_requirements, few_shot_examples)
-            example.edited_caption = module.forward()
-    else:
-        module = GenerateEditCaptionExamplesModule(prompt_requirements, few_shot_examples, task_directive)
-        generated_examples = module.forward()
+    for input in captions_and_instructions:
+        module = GenerateEditedCaptionModule(input['original_caption'], input['edit_instruction'], prompt_requirements, few_shot_examples)
+        input['resulting_caption'] = module.forward()
 
     results = []
     scores = []
     sum_score = 0
     max_score = 0
+    count = 0
     module = ValidateEditedCaptionModule()
-    for example in generated_examples:
+    for example in captions_and_instructions:
         is_edited, is_complete, is_same_words, is_minimal_effort = module.forward(example)
         edited, complete, same_words, minimal_effort = [m.assessment_answer for m in [is_edited, is_complete, is_same_words, is_minimal_effort]]
         score = edited + complete + same_words + minimal_effort
-        print(f"{score}\n{example.original_caption}\n{example.resulting_caption}\n")
+        count += 1
+        print(f"\n{count}.\n{example['original_caption']}\n{example['resulting_caption']}\n{score} / {edited} + {complete} + {same_words} + {minimal_effort}\n")
         scores.append(score)
         sum_score += score
         max_score += 40
@@ -103,5 +111,4 @@ if __name__ == "__main__":
     results_df.to_csv('results.csv', index=False)
 
     print(f"\n{sum_score}/{max_score}\n")
-    print(f"\n{scores}\n")
 
