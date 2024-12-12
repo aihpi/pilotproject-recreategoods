@@ -27,5 +27,5 @@ class GenerateEditedCaptionModule(dspy.Module):
             original_caption=self.original_caption,
             edit_instruction=self.edit_instruction
         )
-        print(f"\n\n{self.original_caption}\n{result['resulting_caption']}\n{self.edit_instruction}")
+        print(f"\n{self.original_caption}\n{result['resulting_caption']}\n{self.edit_instruction}\n")
         return result['resulting_caption']

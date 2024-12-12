@@ -1,7 +1,6 @@
 import dspy
 from loguru import logger
 import pandas as pd
-import argparse
 
 from prompt_generate.programs.personas import personas
 
@@ -14,20 +13,12 @@ from prompt_generate.programs.step3_asses_generated_edit_caption_examples.progra
 lm = dspy.LM('ollama_chat/qwen2.5:14b', api_base='http://localhost:11434', api_key='')
 dspy.settings.configure(lm=lm)
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--fewshot', default='examples_0.json', help='Path to few-shot examples file')
-parser.add_argument('--input', help='Path to input examples file')
-args = parser.parse_args()
-
-fewshot = args.fewshot
-input = args.input
-
 data_dir = "prompt_generate/data"
 
 if __name__ == "__main__":
 
+    # Generate as many as possible unique original captions per persona (avg. 25)
     unique_original_captions = set()
-        
     for persona in personas:
         module = GenerateOriginalCaptionsModule(persona)
         original_captions = module.forward()
@@ -38,6 +29,7 @@ if __name__ == "__main__":
 
     logger.info(f"Total unique original captions: {len(unique_original_captions)}")
 
+    # Generate for each unique original caption three different edit instructions
     captions_and_instructions = []
     for caption in unique_original_captions:
         print(f"\n{caption}")
@@ -50,10 +42,12 @@ if __name__ == "__main__":
                 'edit_instruction': instruction
             })
 
+    # Generate the edited caption for each unique original caption and edit instruction
     for input in captions_and_instructions:
         module = GenerateEditedCaptionModule(input['original_caption'], input['edit_instruction'])
         input['resulting_caption'] = module.forward()
 
+    # Assess the edited caption qu
     results = []
     scores = []
     sum_score = 0
@@ -85,6 +79,7 @@ if __name__ == "__main__":
         }
         results.append(result_row)
 
+    # Save the results to a CSV file
     results_df = pd.DataFrame(results)
     results_df.to_csv('results.csv', index=False)
 
