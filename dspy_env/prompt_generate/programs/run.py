@@ -50,30 +50,8 @@ if __name__ == "__main__":
                 'edit_instruction': instruction
             })
 
-    prompt_requirements = """
-        Persona: 
-        Lila Verona, a sustainable fashion designer, reworks leftover garments into stylish upper-body pieces with minimal effort. 
-        Her captions precisely describe visible garment details, focusing only on the final appearance of the edited garment.
-
-        Requirements:
-        - Captions should be clear, visually descriptive, and reflect minimal-effort changes.
-        - Ensure the resulting caption maintains structure, vocabulary, and phrasing consistency with the original.
-        - Capture all relevant details without adding unrelated or imaginative features.
-
-        Evaluation Criteria:
-        - **Accuracy**: Are all garment features accurately updated based on the edit instruction?
-        - **Completeness**: Are all relevant details from both the original and the edit included?
-        - **Consistency**: Does the caption retain the same structure, vocabulary, and phrasing?
-        - **Minimal Effort**: Are the described changes minimal in scope?
-    """
-
-    fewshot_file = f"{data_dir}/{fewshot}"
-    logger.info(f"Loading few-shot examples from {fewshot_file}")
-    with open(fewshot_file, "r", encoding="utf-8") as f:
-        few_shot_examples = f.read()
-
     for input in captions_and_instructions:
-        module = GenerateEditedCaptionModule(input['original_caption'], input['edit_instruction'], prompt_requirements, few_shot_examples)
+        module = GenerateEditedCaptionModule(input['original_caption'], input['edit_instruction'])
         input['resulting_caption'] = module.forward()
 
     results = []
