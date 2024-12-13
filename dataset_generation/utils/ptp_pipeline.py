@@ -13,6 +13,11 @@ import torch.nn.functional as F
 from utils.processor import CustomFluxAttnProcessor2_0, create_controller
 
 
+
+# Copied from diffusers.pipeline
+# stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
+
+
 def calculate_shift(
         image_seq_len,
         base_seq_len: int = 256,
@@ -24,8 +29,7 @@ def calculate_shift(
         b = base_shift - m * base_seq_len
         mu = image_seq_len * m + b
         return mu
-# Copied from diffusers.pipeline
-# s.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
+
 def retrieve_timesteps(
     scheduler,
     num_inference_steps: Optional[int] = None,
@@ -84,85 +88,6 @@ def retrieve_timesteps(
         timesteps = scheduler.timesteps
     return timesteps, num_inference_steps
 
-
-class CustomFluxTransformerBlock(FluxTransformerBlock):
-    r"""
-    A Transformer block following the MMDiT architecture, introduced in Stable Diffusion 3.
-
-    Reference: https://arxiv.org/abs/2403.03206
-
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        context_pre_only (`bool`): Boolean to determine if we should add some blocks associated with the
-            processing of `context` conditions.
-    """
-
-    def __init__(self, dim, num_attention_heads, attention_head_dim, qk_norm="rms_norm", eps=1e-6):
-        super().__init__(dim, num_attention_heads, attention_head_dim, qk_norm=qk_norm, eps=eps)
-        self.prompt_to_prompt = False
-        self.p2p_strength = 0.4
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        encoder_hidden_states: torch.FloatTensor,
-        temb: torch.FloatTensor,
-        image_rotary_emb=None,
-        joint_attention_kwargs=None,
-    ):
-        norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=temb)
-
-        norm_encoder_hidden_states, c_gate_msa, c_shift_mlp, c_scale_mlp, c_gate_mlp = self.norm1_context(
-            encoder_hidden_states, emb=temb
-        )
-        joint_attention_kwargs = joint_attention_kwargs or {}
-        # Attention.
-        attn_output, context_attn_output = self.attn(
-            hidden_states=norm_hidden_states,
-            encoder_hidden_states=norm_encoder_hidden_states,
-            image_rotary_emb=image_rotary_emb,
-            **joint_attention_kwargs,
-        )
-        if self.prompt_to_prompt:
-            assert attn_output.size(0) == 2, "Batch size must be 2 for this implementation."
-            # Modify text attention
-            attn_output = attn_output.chunk(2, dim=0)  # Split the attention tensor into two parts
-            blended_txt_attn = self.p2p_strength * attn_output[0] + (1 - self.p2p_strength) * attn_output[1]
-            attn_output = torch.cat((attn_output[0], blended_txt_attn), dim=0)
-
-            # Modify image attention in a similar manner
-            context_attn_output = context_attn_output.chunk(2, dim=0)  # Split the image attention tensor
-            blended_img_attn = self.p2p_strength * context_attn_output[0] + (1 - self.p2p_strength) * context_attn_output[1]
-            context_attn_output = torch.cat((context_attn_output[0], blended_img_attn), dim=0)
-
-        # Process attention outputs for the `hidden_states`.
-        attn_output = gate_msa.unsqueeze(1) * attn_output
-        hidden_states = hidden_states + attn_output
-
-        norm_hidden_states = self.norm2(hidden_states)
-        norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-
-        ff_output = self.ff(norm_hidden_states)
-        ff_output = gate_mlp.unsqueeze(1) * ff_output
-
-        hidden_states = hidden_states + ff_output
-
-        # Process attention outputs for the `encoder_hidden_states`.
-
-        context_attn_output = c_gate_msa.unsqueeze(1) * context_attn_output
-        encoder_hidden_states = encoder_hidden_states + context_attn_output
-
-        norm_encoder_hidden_states = self.norm2_context(encoder_hidden_states)
-        norm_encoder_hidden_states = norm_encoder_hidden_states * (1 + c_scale_mlp[:, None]) + c_shift_mlp[:, None]
-
-        context_ff_output = self.ff_context(norm_encoder_hidden_states)
-        encoder_hidden_states = encoder_hidden_states + c_gate_mlp.unsqueeze(1) * context_ff_output
-        if encoder_hidden_states.dtype == torch.float16:
-            encoder_hidden_states = encoder_hidden_states.clip(-65504, 65504)
-
-        return encoder_hidden_states, hidden_states
-
         
 
 class Prompt2PromptPipeline(FluxPipeline):
@@ -206,72 +131,7 @@ class Prompt2PromptPipeline(FluxPipeline):
         transformer
     ):
         super().__init__(scheduler, vae, text_encoder, tokenizer, text_encoder_2, tokenizer_2, transformer)
-        
-        # num_attention_heads = self.transformer.config.num_attention_heads
-        # attention_head_dim = self.transformer.config.attention_head_dim
-        # for name, module in self.transformer.named_modules():
-        #     if isinstance(module, FluxTransformerBlock):
-        #         parent, child_name = self.transformer, name.split('.')
-        #         for p in child_name[:-1]:
-        #             parent = getattr(parent, p)
-        #         new_block = CustomFluxTransformerBlock(
-        #             dim=num_attention_heads * attention_head_dim,
-        #             num_attention_heads=num_attention_heads,
-        #             attention_head_dim=attention_head_dim,
-        #         )
-        #         new_block.load_state_dict(module.state_dict())
-        #         new_block.to(torch.bfloat16)
-        #         setattr(parent, child_name[-1], new_block)
-
  
-    def check_inputs(
-            self,
-            prompt,
-            prompt_2,
-            height,
-            width,
-            prompt_embeds=None,
-            pooled_prompt_embeds=None,
-            callback_on_step_end_tensor_inputs=None,
-            max_sequence_length=None,
-        ):
-        if height % 8 != 0 or width % 8 != 0:
-            raise ValueError(f"`height` and `width` have to be divisible by 8 but are {height} and {width}.")
-
-        if callback_on_step_end_tensor_inputs is not None and not all(
-            k in self._callback_tensor_inputs for k in callback_on_step_end_tensor_inputs
-        ):
-            raise ValueError(
-                f"`callback_on_step_end_tensor_inputs` has to be in {self._callback_tensor_inputs}, but found {[k for k in callback_on_step_end_tensor_inputs if k not in self._callback_tensor_inputs]}"
-            )
-
-        if prompt is not None and prompt_embeds is not None:
-            raise ValueError(
-                f"Cannot forward both `prompt`: {prompt} and `prompt_embeds`: {prompt_embeds}. Please make sure to"
-                " only forward one of the two."
-            )
-        elif prompt_2 is not None and prompt_embeds is not None:
-            raise ValueError(
-                f"Cannot forward both `prompt_2`: {prompt_2} and `prompt_embeds`: {prompt_embeds}. Please make sure to"
-                " only forward one of the two."
-            )
-        elif prompt is None and prompt_embeds is None:
-            raise ValueError(
-                "Provide either `prompt` or `prompt_embeds`. Cannot leave both `prompt` and `prompt_embeds` undefined."
-            )
-        elif prompt is not None and (not isinstance(prompt, str) and not isinstance(prompt, list)):
-            raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(prompt)}")
-        elif prompt_2 is not None and (not isinstance(prompt_2, str) and not isinstance(prompt_2, list)):
-            raise ValueError(f"`prompt_2` has to be of type `str` or `list` but is {type(prompt_2)}")
-
-        if prompt_embeds is not None and pooled_prompt_embeds is None:
-            raise ValueError(
-                "If `prompt_embeds` are provided, `pooled_prompt_embeds` also have to be passed. Make sure to generate `pooled_prompt_embeds` from the same text encoder that was used to generate `prompt_embeds`."
-            )
-
-        if max_sequence_length is not None and max_sequence_length > 512:
-            raise ValueError(f"`max_sequence_length` cannot be greater than 512 but is {max_sequence_length}")
-
 
     @torch.no_grad()
     def __call__(
@@ -294,8 +154,6 @@ class Prompt2PromptPipeline(FluxPipeline):
         callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 512,
-        p2p_strength = 0.6,
-        p2p_threshold = 0.6,
     ):
         r"""
         Function invoked when calling the pipeline for generation.
