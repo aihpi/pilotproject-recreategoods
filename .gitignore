@@ -7,14 +7,16 @@ _*.*
 *.pem
 /pix2pix/flux/output
 /logs/*
+/ai-toolkit/
+/fashion_dataset/
+/h_and_m_fashion_caption_12k/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
+pix2pix/lightning_logs
 # C extensions
 *.so
-
 # Distribution / packaging
 .Python
 build/

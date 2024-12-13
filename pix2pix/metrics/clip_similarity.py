@@ -15,6 +15,9 @@ class ClipSimilarity(nn.Module):
 
         self.model, _ = clip.load(name, device="cpu", download_root="./")
         self.model.eval().requires_grad_(False)
+        self.model.logit_scale = torch.nn.Parameter(
+            torch.tensor([self.model.logit_scale.item()], requires_grad=True)
+        )
 
         self.register_buffer("mean", torch.tensor((0.48145466, 0.4578275, 0.40821073)))
         self.register_buffer("std", torch.tensor((0.26862954, 0.26130258, 0.27577711)))
