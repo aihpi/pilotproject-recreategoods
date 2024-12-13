@@ -13,31 +13,31 @@ from typing import Dict
 import os
 from tqdm import tqdm
 
+
 class PromptProcessor(pl.LightningModule):
-    def __init__(self, out_dir: str, steps: int, min_cfg: float, max_cfg: float, min_threshold : float, max_threshold: float, mixed_precision: bool, clip_thresholds : Dict, is_main_process: bool, rank: int):
+    def __init__(self, config, is_main_process: bool, rank: int):
         super().__init__()
-        self.out_dir = Path(out_dir)
-        self.steps = steps
-        self.min_cfg = min_cfg
-        self.max_cfg = max_cfg
-        self.min_threshold = min_threshold
-        self.max_threshold = max_threshold
-        self.mixed_precision = mixed_precision
+        self.config = config
+        self.out_dir = Path(config.output_dir)
+        self.steps = config.generation.steps
+        self.min_cfg = config.generation.cfg_min
+        self.max_cfg = config.generation.cfg_max
+        self.min_threshold = config.generation.p2p_threshold_min
+        self.max_threshold = config.generation.p2p_threshold_max
         self.clip_similarity = ClipSimilarity().cuda()
-        self.clip_thresholds = clip_thresholds
+        self.clip_thresholds = config.clip_thresholds
         self.is_main_process = is_main_process
         self.rank = rank
-        # Set up the Diffusion pipeline
+
+        # Initialize the Diffusion pipeline
         self.pipe = DiffusionPipeline.from_pretrained(
-            "shuttleai/shuttle-3.1-aesthetic",
-            torch_dtype=torch.bfloat16,
+            config.model.name,
+            torch_dtype=getattr(torch, config.model.dtype),
             custom_pipeline='./utils/ptp_pipeline.py'
         ).to("cuda")
-        self.pipe.load_lora_weights('aihpi/flux-fashion-lora')
+        self.pipe.load_lora_weights(config.model.lora_weights)
         self.pipe.set_progress_bar_config(disable=True)
 
-        if mixed_precision:
-            torch.set_default_dtype(torch.float16)
 
     def compute_clip_similarity(self, image_0, image_1, prompt_0, prompt_1):
         """
@@ -66,24 +66,36 @@ class PromptProcessor(pl.LightningModule):
     @staticmethod
     def save_results(results: Dict, prompt_dir: Path, opt: Dict):
         """Save generated images and metadata."""
-        metadata = [
-            (result["clip_sim_dir"], seed)
-            for seed, result in results.items()
-            # if result["clip_sim_image"] >= opt["clip_img_threshold"]
-            # and result["clip_sim_dir"] >= opt["clip_dir_threshold"]
-            # and result["clip_sim_0"] >= opt["clip_threshold"]
-            # and result["clip_sim_1"] >= opt["clip_threshold"]
-        ]
+        if opt["enable_filtering"] != True:
+            metadata = [(result["clip_sim_dir"], seed) or seed, result in results.items()]
+            metadata.sort(reverse=True)
+            for _, seed in metadata:
+                result = results[seed]
+                image_0 = result.pop("image_0")
+                image_1 = result.pop("image_1")
+                image_0.save(prompt_dir.joinpath(f"{seed}_0.jpg"), quality=100)
+                image_1.save(prompt_dir.joinpath(f"{seed}_1.jpg"), quality=100)
+                with open(prompt_dir.joinpath(f"metadata.jsonl"), "a") as fp:
+                    fp.write(f"{json.dumps(dict(seed=seed, **result))}\n")
+        else:
+            metadata = [
+                (result["clip_sim_dir"], seed)
+                for seed, result in results.items()
+                if result["clip_sim_image"] >= opt["clip_img_threshold"]
+                and result["clip_sim_dir"] >= opt["clip_dir_threshold"]
+                and result["clip_sim_0"] >= opt["clip_threshold"]
+                and result["clip_sim_1"] >= opt["clip_threshold"]
+            ]
         
-        metadata.sort(reverse=True)
-        for _, seed in metadata[: opt["max_out_samples"]]:
-            result = results[seed]
-            image_0 = result.pop("image_0")
-            image_1 = result.pop("image_1")
-            image_0.save(prompt_dir.joinpath(f"{seed}_0.jpg"), quality=100)
-            image_1.save(prompt_dir.joinpath(f"{seed}_1.jpg"), quality=100)
-            with open(prompt_dir.joinpath(f"metadata.jsonl"), "a") as fp:
-                fp.write(f"{json.dumps(dict(seed=seed, **result))}\n")
+            metadata.sort(reverse=True)
+            for _, seed in metadata[: opt["max_out_samples"]]:
+                result = results[seed]
+                image_0 = result.pop("image_0")
+                image_1 = result.pop("image_1")
+                image_0.save(prompt_dir.joinpath(f"{seed}_0.jpg"), quality=100)
+                image_1.save(prompt_dir.joinpath(f"{seed}_1.jpg"), quality=100)
+                with open(prompt_dir.joinpath(f"metadata.jsonl"), "a") as fp:
+                    fp.write(f"{json.dumps(dict(seed=seed, **result))}\n")
 
     def test_step(self, batch, batch_idx):
         prompt_idx, prompt, n_samples = batch
@@ -105,20 +117,18 @@ class PromptProcessor(pl.LightningModule):
             if seed in results: continue
             generator = torch.Generator(device="cuda").manual_seed(seed)
             cfg_scale = self.min_cfg + torch.rand(()).item() * (self.max_cfg - self.min_cfg)
-            p2p_threshold = np.random.uniform(low=0.6, high=0.9)
+            p2p_threshold = np.random.uniform(low=self.min_threshold, high=self.max_threshold)
             amplify, suppress, shared  = extract_key_changes(prompt["original_caption"], prompt["resulting_caption"])
 
-            # Generate two images: one from the original caption and one from the resulting caption
-            # by passing them as a list. Each prompt in the list produces one image.
             joint_attention_kwargs = {
                 'self_replace_steps': p2p_threshold,
                 'resulting_caption': prompt["resulting_caption"],
                 'words_shared': shared,
                 "words_amplification": amplify,
                 "words_suppression": suppress,
-                "shared_factor": 1.0,
-                "amplification_factor": 1.0,
-                "suppression_factor": 1.0,
+                "shared_factor": self.config.attention.shared_factor,
+                "amplification_factor": self.config.attention.amplification_factor,
+                "suppression_factor": self.config.attention.suppression_factor,
             }
 
             # Generate images
@@ -129,6 +139,8 @@ class PromptProcessor(pl.LightningModule):
                 joint_attention_kwargs=joint_attention_kwargs,
                 num_images_per_prompt=1,
                 generator=generator,
+                height=self.config.generation.image_size.height,
+                width=self.config.generation.image_size.width,
             ).images
 
             # Compute CLIP similarity
