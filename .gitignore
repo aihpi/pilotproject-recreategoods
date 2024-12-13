@@ -1,7 +1,10 @@
 *.jpg
 *.pt
-*.json
+
 *.jsonl
+dataset_generation/lightning_logs/
+.vscode/
+dataset_generation/data/*/
 pix2pix/data/
 _*.*
 *.pem

@@ -65,7 +65,7 @@ def main():
         strategy=FSDPStrategy(),
         max_epochs=1,
         log_every_n_steps=10,
-        precision=32,
+        precision="16-mixed" if args.mixed_precision else 32,
     )
 
     trainer.test(model, datamodule)

@@ -2,7 +2,7 @@ import sys
 sys.path.append("./")
 import lightning as pl
 from diffusers import DiffusionPipeline
-from utils.flux_processor import extract_key_changes
+from utils.processor import extract_key_changes
 from metrics.clip_similarity import ClipSimilarity
 from pathlib import Path
 import torch
@@ -31,9 +31,9 @@ class PromptProcessor(pl.LightningModule):
         self.pipe = DiffusionPipeline.from_pretrained(
             "shuttleai/shuttle-3.1-aesthetic",
             torch_dtype=torch.bfloat16,
-            custom_pipeline='./utils/prompt_to_prompt_shuttle.py'
+            custom_pipeline='./utils/ptp_pipeline.py'
         ).to("cuda")
-        self.pipe.load_lora_weights('/home/felix.boelter/recreategoods/ai-toolkit/output/flux_lora_v3/flux_lora_v3.safetensors')
+        self.pipe.load_lora_weights('aihpi/flux-fashion-lora')
         self.pipe.set_progress_bar_config(disable=True)
 
         if mixed_precision:

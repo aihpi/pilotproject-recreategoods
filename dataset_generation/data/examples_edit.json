@@ -1,0 +1,112 @@
+[
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A soft grey knit sweater with long, loose-fitting sleeves, a crew neckline, and ribbed cuffs and hem. The sweater drapes slightly over the hips, giving a relaxed silhouette.",
+        "edit_instruction": "Crop the sweater at the waist and reshape the neckline into a deep V.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A cropped grey knit sweater with long, loose-fitting sleeves, a deep V-neckline, and ribbed cuffs and hem."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A plain white cotton T-shirt with short sleeves, a round neckline, and a straight hem. The T-shirt is slightly oversized, with minimal stitching visible at the seams.",
+        "edit_instruction": "Add ruched side ties for an adjustable fit and create a curved hem.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A slightly oversized white cotton T-shirt with short sleeves, a round neckline, a curved hem, and ruched side ties."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A navy fleece zip-up hoodie with long sleeves, a front kangaroo pocket, and ribbed cuffs. The hoodie has a drawstring hood and a relaxed fit that extends below the hips.",
+        "edit_instruction": "Remove the sleeves to create a sleeveless vest and replace the kangaroo pocket with two front patch pockets.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A navy fleece zip-up sleeveless vest with a drawstring hood, ribbed trims, and two front patch pockets."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A structured white button-up shirt with long sleeves, a pointed collar, and a straight hemline. The shirt has a single chest pocket and crisp vertical pleats along the front.",
+        "edit_instruction": "Shorten the hemline into a cropped style and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A cropped white button-up shirt with long sleeves, a pointed collar, a single chest pocket, crisp vertical pleats, and a cinched waist with elastic darts."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A light blue denim jacket with long sleeves, button closures down the front, and two chest pockets. The jacket features a classic pointed collar and straight hem.",
+        "edit_instruction": "Convert to a sleeveless style by cutting off sleeves at shoulder seams, keeping original buttons and pocket design.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A light blue denim sleeveless jacket with button closures down the front, two chest pockets, and a classic pointed collar."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, An olive green military-style vest with long sleeves that end in wide cuffs. It has five evenly spaced buttons along the front opening.",
+        "edit_instruction": "Remove sleeves entirely to create a sleeveless vest while retaining all other features including button closure and cuff design at arm holes.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, An olive green military-style sleeveless vest with five evenly spaced buttons along the front opening."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A black cotton tank top featuring spaghetti straps that cross in an X pattern over the back, creating a low scoop neck front and a deep plunge neckline at the back.",
+        "edit_instruction": "Widen the straps to form a halter style without altering the crossover design or depth of necklines.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A black cotton halter top featuring spaghetti straps that cross in an X pattern over the back, creating a low scoop neck front and a deep plunge neckline at the back."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A white silk blouse with short sleeves, a stand-up collar, and delicate pintucking along the bodice. The blouse has a single button closure at the throat.",
+        "edit_instruction": "Shorten hemline to crop length while preserving sleeve style, neckline design, and pintucked detail.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A cropped white silk blouse with short sleeves, a stand-up collar, delicate pintucking along the bodice, and a single button closure at the throat."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A floral-patterned chiffon dress with long sheer sleeves. The dress features ruffles around the neckline and hemline, creating an elegant flow.",
+        "edit_instruction": "Cut off sleeves to create a short-sleeved look while retaining the original floral pattern and ruffled details at neckline and hem.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A floral-patterned chiffon top with short sheer sleeves. The top features ruffles around the neckline and hemline, creating an elegant flow."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, An off-white crew neck sweater in a cable knit pattern with ribbed cuffs at the wrist and bottom hem.",
+        "edit_instruction": "Convert to a sleeveless style by cutting sleeves from shoulder seams while retaining original neckline shape and overall cable knit design.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A sleeveless off-white cable knit sweater with a crew neck, featuring ribbed trims around the neck and hem."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A black turtleneck bodysuit made of stretchy fabric. It has short sleeves, snap closures at crotch for easy dressing.",
+        "edit_instruction": "Remove sleeves to make it sleeveless without changing neckline shape or body suit's functionality.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A black sleeveless turtleneck bodysuit made of stretchy fabric with a snug fit and snap closures at the crotch."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A yellow cotton blouse featuring short puff sleeves, gathered shoulders, and button-down front closure. It has two small pockets on either side.",
+        "edit_instruction": "Remove puffed portions from sleeves to create regular fitted sleeves while keeping rest of features intact.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A yellow cotton blouse with short fitted sleeves, gathered shoulders, button-down front closure, and two small pockets on either side."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A burgundy velveteen blazer featuring notch lapels, single-breasted style, long sleeves ending in cuff buttons. It has a two-button front.",
+        "edit_instruction": "Remove sleeves entirely to create a sleeveless jacket while keeping other design elements intact such as lapels and button closure.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A burgundy velveteen sleeveless jacket with notch lapels, single-breasted style, and a two-button front."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A light pink sheer blouse featuring puffy short sleeves, delicate floral embroidery along the hem and cuffs. It has a plunging neckline.",
+        "edit_instruction": "Trim off puffiness in sleeves to make them non-puffed, retaining other decorative elements including embroidery and neckline design.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A light pink sheer blouse with fitted short sleeves, featuring delicate floral embroidery along the hem and cuffs, and a plunging neckline."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A white linen blouse with short sleeves, a relaxed fit, and a subtle texture. The blouse has a single chest pocket.",
+        "edit_instruction": "Add shoulder pads for a more structured silhouette and create side slits for added movement.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A white linen blouse with shoulder pads, short sleeves, a relaxed fit, and side slits. The blouse has a single chest pocket."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A charcoal grey cotton T-shirt with long sleeves, a crew neckline, and a straight hem. The T-shirt has minimal stitching visible at the seams.",
+        "edit_instruction": "Create front and back yoke details for added texture and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A charcoal grey cotton T-shirt with long sleeves, a crew neckline, front and back yoke details, elastic darts, and a curved hem. The T-shirt has minimal stitching visible at the seams."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A bright red cotton sweater with long, loose-fitting sleeves, a round neckline, and ribbed cuffs. The sweater has a subtle sheen to it.",
+        "edit_instruction": "Shorten the sleeves into a cropped style and create front and back darts for added shape.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A bright red cotton sweater with cropped sleeves, a round neckline, front and back darts, and ribbed cuffs. The sweater has a subtle sheen to it."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A white linen shirt with long sleeves, a relaxed fit, and a subtle texture. The shirt has two front patch pockets.",
+        "edit_instruction": "Redefine the collar into a soft ruffle and create side slits for added movement.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A white linen shirt with long sleeves, a relaxed fit, a soft ruffled collar, and side slits. The shirt has two front patch pockets."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A navy cotton dress shirt with short sleeves, a pointed collar, and a straight hemline. The shirt has minimal stitching visible at the seams.",
+        "edit_instruction": "Add front and back yoke details for added texture and shorten the hemline into a cropped style.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A navy cotton dress shirt with short sleeves, a pointed collar, front and back yoke details, and a curved hem. The shirt has minimal stitching visible at the seams."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A pastel pink cotton blouse with long sleeves, a relaxed fit, and a subtle sheen. The blouse has two front patch pockets.",
+        "edit_instruction": "Create shoulder pads for a more structured silhouette and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A pastel pink cotton blouse with shoulder pads, long sleeves, a relaxed fit, elastic darts, and side slits. The blouse has two front patch pockets."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A beige linen shirt with short sleeves, a round neckline, and a subtle texture. The shirt has minimal stitching visible at the seams.",
+        "edit_instruction": "Redefine the collar into a soft ruffle and shorten the hemline into a cropped style.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A beige linen shirt with short sleeves, a round neckline, a soft ruffled collar, and a curved hem. The shirt has minimal stitching visible at the seams."
+    },
+    {
+        "original_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A bright blue cotton T-shirt with long sleeves, a crew neckline, and a straight hem. The T-shirt has two front patch pockets.",
+        "edit_instruction": "Create front and back yoke details for added texture and add elastic darts at the back for a cinched waist.",
+        "resulting_caption": "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, A bright blue cotton T-shirt with long sleeves, a crew neckline, front and back yoke details, elastic darts, and a curved hem. The T-shirt has two front patch pockets."
+    }
+]
