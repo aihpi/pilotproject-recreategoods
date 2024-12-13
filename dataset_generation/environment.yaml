@@ -1,0 +1,36 @@
+name: generate-dataset
+channels:
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch-cuda=12.1
+  - pytorch>=2.5.1
+  - torchvision
+  - numpy
+  - pip
+  - pip:
+    - albumentations==0.4.3
+    - datasets==2.8.0
+    - diffusers
+    - opencv-python>=4.5.0
+    - pudb==2019.2
+    - invisible-watermark
+    - imageio==2.9.0
+    - imageio-ffmpeg==0.4.2
+    - lightning==2.4.0
+    - test-tube>=0.7.5
+    - streamlit>=0.73.1
+    - einops>=0.3.0
+    - torch-fidelity==0.3.0
+    - transformers>=4.19.2
+    - torchmetrics>=0.7.0,<3.0
+    - kornia==0.6
+    - sentencepiece==0.2.0
+    - peft==0.14.0
+    - omegaconf==2.3.0
+    - git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
+    - git+https://github.com/openai/CLIP.git@main#egg=clip
+    - git+https://github.com/crowsonkb/k-diffusion.git

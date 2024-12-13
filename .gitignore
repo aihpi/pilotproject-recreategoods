@@ -1,20 +1,25 @@
 *.jpg
 *.pt
-*.json
+
 *.jsonl
+dataset_generation/lightning_logs/
+.vscode/
+dataset_generation/data/*/
 pix2pix/data/
 _*.*
 *.pem
 /pix2pix/flux/output
 /logs/*
+/ai-toolkit/
+/fashion_dataset/
+/h_and_m_fashion_caption_12k/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
+pix2pix/lightning_logs
 # C extensions
 *.so
-
 # Distribution / packaging
 .Python
 build/

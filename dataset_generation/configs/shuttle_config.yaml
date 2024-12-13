@@ -1,0 +1,47 @@
+# Configuration for dataset generation with the Shuttle model, Prompt-to-Prompt and diffusion pipeline
+
+output_dir: "./data/fashion-data"
+prompts_file: "./data/examples_edit.json"
+
+# Settings for GPU usage
+gpu:
+  devices: "0,1,2,3,4,5,6,7"  # Specify the GPUs to use by their indices
+mixed_precision: false  # Use mixed precision to accelerate computations if supported
+
+# Settings for image generation
+generation:
+  steps: 6 # Number of diffusion steps
+  n_samples: 200 # Number of samples to generate for each prompt
+  cfg_min: 5.5 # Minimum value for classifier-free guidance (CFG) scale
+  cfg_max: 12.5  # Maximum value for classifier-free guidance (CFG) scale
+  p2p_threshold_min: 0.6  # Minimum threshold for Prompt-to-Prompt attention replacement
+  p2p_threshold_max: 0.9  # Maximum threshold for Prompt-to-Prompt attention replacement
+  image_size:  # Dimensions of the generated images
+    height: 1024  # Height of the images in pixels
+    width: 1024  # Width of the images in pixels
+
+# Settings for attention adjustments
+attention:
+  shared_factor: 1.0  # Factor to scale shared self-attention weights
+  amplification_factor: 1.0  # Factor to amplify specified self-attention weights
+  suppression_factor: 1.0  # Factor to suppress specified self-attention weights
+
+# Thresholds for CLIP-based filtering of generated images
+clip_thresholds:
+  enable_filtering: True  # Enable or disable CLIP-based filtering
+  max_out_samples: 10  # Maximum number of samples to retain based on CLIP similarity
+  general: 0.12  # General CLIP similarity threshold
+  directional: 0.12  # Threshold for directional CLIP similarity
+  image: 0.85  # Threshold for image-based CLIP similarity
+
+model:
+  name: "shuttleai/shuttle-3.1-aesthetic" # Pretrained model identifier (Hugging Face model hub)
+  lora_weights: "aihpi/flux-fashion-lora" # Path or Hugging Face repo for LoRA weights
+  dtype: "bfloat16" #  Data type for model computations (e.g., "bfloat16" for Tensor Cores)
+
+# Settings for distributed processing
+distributed:
+  enabled: true  # Enable distributed processing across multiple GPUs
+  backend: "nccl"  # Backend for distributed training (e.g., "nccl" for NVIDIA GPUs)
+
+

@@ -113,6 +113,7 @@ def load_flow_model(name: str, device: str | torch.device = "cuda", hf_download:
         and hf_download
     ):
         ckpt_path = hf_hub_download(configs[name].repo_id, configs[name].repo_flow)
+    print(f"Loading model from {ckpt_path}")
 
     with torch.device("meta" if ckpt_path is not None else device):
         model = Flux(configs[name].params).to(torch.bfloat16)

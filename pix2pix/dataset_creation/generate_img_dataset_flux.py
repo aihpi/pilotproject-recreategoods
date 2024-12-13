@@ -38,7 +38,7 @@ def to_pil(
     img = Image.fromarray((127.5 * (x + 1.0)).cpu().byte().numpy())
     return img
 
-def get_ancestral_step(sigma_from, sigma_to, noise_factor=0.3):
+def get_ancestral_step(sigma_from, sigma_to, noise_factor=0.1):
     """Calculates the noise level (sigma_down) to step down to and the amount
     of noise to add (sigma_up) when doing an ancestral sampling step."""
     sigma_up = noise_factor * min(sigma_to, (sigma_to**2 * (sigma_from**2 - sigma_to**2) / sigma_from**2) ** 0.5)
@@ -130,9 +130,10 @@ def main():
     out_dir = Path(opt.out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
 
-    with open(opt.prompts_file) as fp:
-        prompts = [json.loads(line) for line in fp]
-    
+    with open(opt.prompts_file, 'r') as fp:
+        # prompts = [json.loads(line) for line in fp]
+        prompts = json.load(fp)
+    print(prompts)
     print(f"Partition index {opt.partition} ({opt.partition + 1} / {opt.n_partitions})")
     prompts = np.array_split(list(enumerate(prompts)), opt.n_partitions)[opt.partition]
     height, width = 512, 512
@@ -159,7 +160,7 @@ def main():
                         ae = ae.cpu()
                         torch.cuda.empty_cache()
                         t5, clip = t5.to(device), clip.to(device)
-                    inp = prepare(t5, clip, x, prompt=[prompt["input"], prompt["output"]])
+                    inp = prepare(t5, clip, x, prompt=[prompt["original_caption"], prompt["resulting_caption"]])
                     timesteps = get_schedule(opt.steps, inp["img"].shape[1])
                     if offload:
                         t5, clip = t5.cpu(), clip.cpu()
@@ -179,7 +180,7 @@ def main():
                     x0, x1 = x_samples[0], x_samples[1]
 
                     clip_sim_0, clip_sim_1, clip_sim_dir, clip_sim_image = clip_similarity(
-                        x0[None], x1[None], [prompt["input"]], [prompt["output"]]
+                        x0[None], x1[None], [prompt["original_caption"]], [prompt["resulting_caption"]]
                     )
                     results[seed] = dict(
                         image_0=to_pil(x0),

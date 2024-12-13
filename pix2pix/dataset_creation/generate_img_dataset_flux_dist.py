@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 import argparse
 import json
 import sys
@@ -24,6 +24,7 @@ from flux.model import Flux
 from torch import Tensor
 from flux.modules.layers import DoubleStreamBlock
 from datetime import datetime
+from safetensors import safe_open
 
 def setup_logging(rank, log_dir="../logs"):
     # Create the log directory if it doesn't exist
@@ -82,6 +83,30 @@ def wrap_model_in_ddp(
     except Exception as e:
         print(f"Failed to wrap {model_name} in DDP: {str(e)}. Using non-DDP model.")
         return model.to(device)
+    
+def map_lora_to_flux(lora_key):
+    """
+    Map LoRA keys to Flux model keys.
+    """
+    # Example mapping logic
+    mapping = {
+        "attn.to_k": "img_attn.qkv",
+        "attn.to_q": "img_attn.qkv",
+        "attn.to_v": "img_attn.qkv",
+        "norm.linear": "img_mlp",
+        "proj_mlp": "img_mlp",
+        "proj_out": "img_attn.proj",
+    }
+
+    # Extract the block index from the LoRA key
+    block_index = lora_key.split(".")[3]
+    flux_key_base = f"double_blocks.{block_index}"
+
+    for lora_subkey, flux_subkey in mapping.items():
+        if lora_subkey in lora_key:
+            return f"{flux_key_base}.{flux_subkey}.weight"
+
+    raise KeyError(f"No matching Flux layer for LoRA key: {lora_key}")
 
 def setup_distributed_models(
     name: str,
@@ -96,8 +121,7 @@ def setup_distributed_models(
     clip = load_clip(device)
     model = load_flow_model(name, device="cpu")
     ae = load_ae(name, device=device)
-    
-    
+        
     if offload:
         device_map = "cpu"
     else:
@@ -131,7 +155,7 @@ def prepare_with_ddp(t5: nn.Module, clip: nn.Module, x: torch.Tensor, prompt: li
     clip_base = get_base_model(clip)
     return prepare(t5_base, clip_base, x, prompt)
 
-def get_ancestral_step(sigma_from, sigma_to, noise_factor=0.3):
+def get_ancestral_step(sigma_from, sigma_to, noise_factor=0.1):
     """Calculates the noise level (sigma_down) to step down to and the amount
     of noise to add (sigma_up) when doing an ancestral sampling step."""
     sigma_up = noise_factor * min(sigma_to, (sigma_to**2 * (sigma_from**2 - sigma_to**2) / sigma_from**2) ** 0.5)
@@ -155,6 +179,7 @@ def denoise(
     prompt_to_prompt: bool = False,
     p2p_threshold: float = 0.2,
     noise_factor: float = 0.3,
+    p2p_strength: Optional[float] = None
 ):
     """Denoise images with proper DDP model handling."""
     with torch.no_grad():
@@ -168,7 +193,7 @@ def denoise(
                 for module in base_model.modules():
                     if isinstance(module, DoubleStreamBlock):
                         module.prompt_to_prompt = True
-                        module.p2p_strength = 0.6
+                        module.p2p_strength = p2p_strength
             
             torch.cuda.empty_cache()
             
@@ -259,8 +284,9 @@ def main():
     logger.info(f"Starting process on GPU {local_rank} of {world_size}")
 
     # Load and prepare prompts
-    with open(opt.prompts_file) as fp:
-        all_prompts = [json.loads(line) for line in fp]
+    with open(opt.prompts_file, 'r') as fp:
+        # all_prompts = [json.loads(line) for line in fp]
+        all_prompts = json.load(fp)
     
     total_samples = opt.n_samples * len(all_prompts)
     
@@ -358,17 +384,20 @@ def main():
                     # Generate sample
                     x = get_noise(2, height, width, device=device, dtype=torch.bfloat16, seed=seed)
                     
-                    inp = prepare_with_ddp(t5, clip, x, prompt=[prompt["input"], prompt["output"]])
+                    inp = prepare_with_ddp(t5, clip, x, prompt=[prompt["original_caption"], prompt["resulting_caption"]])
                     timesteps = get_schedule(opt.steps, inp["img"].shape[1])
 
                     p2p_threshold = opt.min_p2p + torch.rand(()).item() * (opt.max_p2p - opt.min_p2p)
+                    p2p_strength = np.random.uniform(low=0.4, high=1.01)
+                    noise_factor = np.random.uniform(low=0.01, high=0.5)
                     x = denoise(
                         model, 
                         **inp, 
                         timesteps=timesteps, 
                         prompt_to_prompt=True, 
                         p2p_threshold=p2p_threshold,
-                        noise_factor=opt.noise_factor
+                        noise_factor=noise_factor,
+                        p2p_strength=p2p_strength
                     )
                     
                     # Decode
@@ -379,7 +408,7 @@ def main():
 
                     # Calculate CLIP similarity
                     clip_sim_0, clip_sim_1, clip_sim_dir, clip_sim_image = clip_similarity(
-                        x0[None], x1[None], [prompt["input"]], [prompt["output"]]
+                        x0[None], x1[None], [prompt["original_caption"]], [prompt["resulting_caption"]]
                     )
                     
                     # Clean up intermediate tensors
