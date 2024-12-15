@@ -1,20 +1,21 @@
 # Configuration for dataset generation with the Shuttle model, Prompt-to-Prompt and diffusion pipeline
 
-output_dir: "./data/fashion-data"
-prompts_file: "./data/examples_edit.json"
+output_dir: "./data/dataset-full-4"
+prompts_file: "./data/full_data.json"
 
 # Settings for GPU usage
 gpu:
   devices: "0,1,2,3,4,5,6,7"  # Specify the GPUs to use by their indices
 mixed_precision: false  # Use mixed precision to accelerate computations if supported
+num_workers: 8  # Number of workers for data loading
 
 # Settings for image generation
 generation:
-  steps: 6 # Number of diffusion steps
+  steps: 4 # Number of diffusion steps
   n_samples: 200 # Number of samples to generate for each prompt
-  cfg_min: 5.5 # Minimum value for classifier-free guidance (CFG) scale
-  cfg_max: 12.5  # Maximum value for classifier-free guidance (CFG) scale
-  p2p_threshold_min: 0.6  # Minimum threshold for Prompt-to-Prompt attention replacement
+  cfg_min: 3.5 # Minimum value for classifier-free guidance (CFG) scale
+  cfg_max: 15  # Maximum value for classifier-free guidance (CFG) scale
+  p2p_threshold_min: 0.1  # Minimum threshold for Prompt-to-Prompt attention replacement
   p2p_threshold_max: 0.9  # Maximum threshold for Prompt-to-Prompt attention replacement
   image_size:  # Dimensions of the generated images
     height: 1024  # Height of the images in pixels
@@ -23,16 +24,16 @@ generation:
 # Settings for attention adjustments
 attention:
   shared_factor: 1.0  # Factor to scale shared self-attention weights
-  amplification_factor: 1.0  # Factor to amplify specified self-attention weights
+  amplification_factor: 1.6  # Factor to amplify specified self-attention weights
   suppression_factor: 1.0  # Factor to suppress specified self-attention weights
 
 # Thresholds for CLIP-based filtering of generated images
 clip_thresholds:
   enable_filtering: True  # Enable or disable CLIP-based filtering
   max_out_samples: 10  # Maximum number of samples to retain based on CLIP similarity
-  general: 0.12  # General CLIP similarity threshold
-  directional: 0.12  # Threshold for directional CLIP similarity
-  image: 0.85  # Threshold for image-based CLIP similarity
+  clip_threshold: 0.2  # General CLIP similarity threshold
+  clip_dir_threshold: 0.2  # Threshold for directional CLIP similarity
+  clip_img_threshold: 0.7  # Threshold for image-based CLIP similarity
 
 model:
   name: "shuttleai/shuttle-3.1-aesthetic" # Pretrained model identifier (Hugging Face model hub)
@@ -43,5 +44,3 @@ model:
 distributed:
   enabled: true  # Enable distributed processing across multiple GPUs
   backend: "nccl"  # Backend for distributed training (e.g., "nccl" for NVIDIA GPUs)
-
-

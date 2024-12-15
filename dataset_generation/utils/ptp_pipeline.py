@@ -262,6 +262,7 @@ class Prompt2PromptPipeline(FluxPipeline):
         else:
             batch_size = prompt_embeds.shape[0]
 
+
         device = self._execution_device
 
         lora_scale = (
@@ -285,7 +286,7 @@ class Prompt2PromptPipeline(FluxPipeline):
         # 4. Prepare latent variables
         num_channels_latents = self.transformer.config.in_channels // 4
         latents, latent_image_ids = self.prepare_latents(
-            batch_size * num_images_per_prompt,
+            1 * num_images_per_prompt,
             num_channels_latents,
             height,
             width,
@@ -294,7 +295,7 @@ class Prompt2PromptPipeline(FluxPipeline):
             generator,
             latents,
         )
-
+        latents = latents.expand(batch_size, -1, -1)
         # 5. Prepare timesteps
         sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
         image_seq_len = latents.shape[1]

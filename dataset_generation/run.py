@@ -28,12 +28,14 @@ def main():
     torch.set_float32_matmul_precision('high')
     if config.mixed_precision:
         torch.set_default_dtype(torch.float16)
+        
     # Initialize Data Module
     datamodule = PromptDataModule(
         prompts_file=config.prompts_file,
         n_samples=config.generation.n_samples,
         world_size=world_size,
-        local_rank=local_rank
+        local_rank=local_rank,
+        num_workers=config.num_workers
     )
 
     # Initialize Processor

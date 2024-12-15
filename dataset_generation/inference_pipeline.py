@@ -67,7 +67,7 @@ class PromptProcessor(pl.LightningModule):
     def save_results(results: Dict, prompt_dir: Path, opt: Dict):
         """Save generated images and metadata."""
         if opt["enable_filtering"] != True:
-            metadata = [(result["clip_sim_dir"], seed) or seed, result in results.items()]
+            metadata = [(result["clip_sim_dir"], seed) for seed, result in results.items()]
             metadata.sort(reverse=True)
             for _, seed in metadata:
                 result = results[seed]
@@ -98,6 +98,8 @@ class PromptProcessor(pl.LightningModule):
                     fp.write(f"{json.dumps(dict(seed=seed, **result))}\n")
 
     def test_step(self, batch, batch_idx):
+        def create_scale(min, max):
+            return min + torch.rand(()).item() * (max - min)
         prompt_idx, prompt, n_samples = batch
         prompt_dir = self.out_dir.joinpath(f"{prompt_idx:07d}")
         prompt_dir.mkdir(exist_ok=True, parents=True)
@@ -116,19 +118,21 @@ class PromptProcessor(pl.LightningModule):
             seed = torch.randint(1 << 32, ()).item()
             if seed in results: continue
             generator = torch.Generator(device="cuda").manual_seed(seed)
-            cfg_scale = self.min_cfg + torch.rand(()).item() * (self.max_cfg - self.min_cfg)
-            p2p_threshold = np.random.uniform(low=self.min_threshold, high=self.max_threshold)
+            cfg_scale = create_scale(self.min_cfg, self.max_cfg)
+            p2p_threshold = create_scale(self.min_threshold, self.max_threshold)
             amplify, suppress, shared  = extract_key_changes(prompt["original_caption"], prompt["resulting_caption"])
-
+            amplify_factor = create_scale(1.0, self.config.attention.amplification_factor)
+            suppress_factor = create_scale(self.config.attention.suppression_factor, 1.0)
+            shared_factor = create_scale(1.0, self.config.attention.shared_factor)
             joint_attention_kwargs = {
                 'self_replace_steps': p2p_threshold,
                 'resulting_caption': prompt["resulting_caption"],
                 'words_shared': shared,
                 "words_amplification": amplify,
                 "words_suppression": suppress,
-                "shared_factor": self.config.attention.shared_factor,
-                "amplification_factor": self.config.attention.amplification_factor,
-                "suppression_factor": self.config.attention.suppression_factor,
+                "shared_factor": shared_factor,
+                "amplification_factor": amplify_factor,
+                "suppression_factor": suppress_factor,
             }
 
             # Generate images
@@ -154,6 +158,12 @@ class PromptProcessor(pl.LightningModule):
                 "shared": shared,
                 "amplify": amplify,
                 "suppress": suppress,
+                "amplify_factor": amplify_factor,
+                "suppress_factor": suppress_factor,
+                "shared_factor": shared_factor,
+                "p2p_threshold": p2p_threshold,
+                "cfg_scale": cfg_scale,
+                "self_replace_steps": p2p_threshold,
                 "image_0": images[0],
                 "image_1": images[1],
             }
