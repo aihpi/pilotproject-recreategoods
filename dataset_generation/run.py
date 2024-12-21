@@ -4,10 +4,13 @@ sys.path.append("./")
 from utils.config_loader import load_config
 import argparse
 import lightning as pl
-from lightning.pytorch.strategies import FSDPStrategy
-from data_module import PromptDataModule
-from inference_pipeline import PromptProcessor
+from lightning.pytorch.strategies import DDPStrategy
+from dataloaders.data_module import PromptDataModule
+from dataloaders.vie_data_module import VIEScoreDataModule
+from pipelines.inference_pipeline import PromptProcessor
+from pipelines.viescore_pipeline import VIEScoreEvaluator
 import torch
+import gc
 
 def main():
     parser = argparse.ArgumentParser()
@@ -49,13 +52,28 @@ def main():
     trainer = pl.Trainer(
         devices='auto',
         accelerator="gpu",
-        strategy=FSDPStrategy(),
+        strategy=DDPStrategy(),
         max_epochs=1,
         log_every_n_steps=10,
         precision="16-mixed" if config.mixed_precision else 32,
     )
 
     trainer.test(model, datamodule)
+
+    del model
+    del datamodule
+    torch.cuda.empty_cache()
+    gc.collect()
+    
+    vie_datamodule = VIEScoreDataModule(
+        dataset_dir=config.output_dir,
+        world_size=world_size,
+        local_rank=local_rank,
+        num_workers=config.num_workers
+    )
+    vie_model = VIEScoreEvaluator(config)
+    
+    trainer.test(vie_model, vie_datamodule)
 
 if __name__ == "__main__":
     main()

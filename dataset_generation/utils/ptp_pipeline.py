@@ -5,10 +5,8 @@ from diffusers.pipelines.flux.pipeline_output import FluxPipelineOutput
 from diffusers.pipelines.flux import FluxPipeline
 from typing import Optional, Union, Dict
 import inspect
-from diffusers.models.transformers.transformer_flux import FluxTransformerBlock
 import torch
 import numpy as np
-from diffusers.models.attention_processor import Attention
 import torch.nn.functional as F
 from utils.processor import CustomFluxAttnProcessor2_0, create_controller
 
