@@ -15,6 +15,7 @@ import gc
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str, required=True)
+    parser.add_argument("--num_nodes", type=int, default=1, help="Number of nodes to use (default: 1)")
     args = parser.parse_args()
     config = load_config(args.config_path)
     # Set CUDA_VISIBLE_DEVICES based on config
@@ -51,6 +52,7 @@ def main():
     # Configure Trainer for Inference
     trainer = pl.Trainer(
         devices='auto',
+        num_nodes=args.num_nodes,
         accelerator="gpu",
         strategy=DDPStrategy(),
         max_epochs=1,
