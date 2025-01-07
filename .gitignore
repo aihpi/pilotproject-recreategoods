@@ -2,6 +2,7 @@
 *.pt
 *.json
 *.jsonl
+*.csv
 pix2pix/data/
 _*.*
 *.pem
