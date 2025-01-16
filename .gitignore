@@ -2,7 +2,9 @@
 *.pt
 
 *.jsonl
+train/wandb
 dataset_generation/lightning_logs/
+train/FLUX-Training
 .vscode/
 dataset_generation/data/*/
 pix2pix/data/
