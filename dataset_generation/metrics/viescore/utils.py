@@ -6,8 +6,10 @@ import ast
 import random
 
 def fix_json(input_str):
+    match = re.match(r'(\{.*?\})(?=\{|\Z)', input_str)
+    first_json_str = match.group(1)
     # Add double quotes around keys using regex
-    fixed_str = re.sub(r'(\w+):', r'"\1":', input_str)
+    fixed_str = re.sub(r'(\w+):', r'"\1":', first_json_str)
     
     # Add double quotes around string values if necessary and wrap int/float values in []
     def format_value(match):

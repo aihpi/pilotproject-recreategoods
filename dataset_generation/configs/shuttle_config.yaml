@@ -1,7 +1,7 @@
 # Configuration for dataset generation with the Shuttle model, Prompt-to-Prompt and diffusion pipeline
 
-output_dir: "./data/dataset-viescore"
-prompts_file: "./data/examples_edit.json"
+output_dir: "./data/dataset"
+prompts_file: "./data/examples.json"
 
 # Settings for GPU usage
 gpu:
@@ -12,7 +12,7 @@ num_workers: 8  # Number of workers for data loading
 # Settings for image generation
 generation:
   steps: 4 # Number of diffusion steps
-  n_samples: 20 # Number of samples to generate for each prompt
+  n_samples: 50 # Number of samples to generate for each prompt
   cfg_min: 3.5 # Minimum value for classifier-free guidance (CFG) scale
   cfg_max: 15  # Maximum value for classifier-free guidance (CFG) scale
   p2p_threshold_min: 0.1  # Minimum threshold for Prompt-to-Prompt attention replacement

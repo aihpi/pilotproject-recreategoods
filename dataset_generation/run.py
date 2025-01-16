@@ -4,7 +4,7 @@ sys.path.append("./")
 from utils.config_loader import load_config
 import argparse
 import lightning as pl
-from lightning.pytorch.strategies import DDPStrategy
+from lightning.pytorch.strategies import FSDPStrategy
 from dataloaders.data_module import PromptDataModule
 from dataloaders.vie_data_module import VIEScoreDataModule
 from pipelines.inference_pipeline import PromptProcessor
@@ -36,6 +36,7 @@ def main():
     # Initialize Data Module
     datamodule = PromptDataModule(
         prompts_file=config.prompts_file,
+        data_dir=config.output_dir,
         n_samples=config.generation.n_samples,
         world_size=world_size,
         local_rank=local_rank,
@@ -54,7 +55,7 @@ def main():
         devices='auto',
         num_nodes=args.num_nodes,
         accelerator="gpu",
-        strategy=DDPStrategy(),
+        strategy=FSDPStrategy(),
         max_epochs=1,
         log_every_n_steps=10,
         precision="16-mixed" if config.mixed_precision else 32,

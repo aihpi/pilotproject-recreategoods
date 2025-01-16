@@ -4,6 +4,7 @@ import lightning as pl
 from typing import List, Dict
 from torch.utils.data import Dataset
 from torch.utils.data.distributed import DistributedSampler
+from pathlib import Path
 
 class PromptDataset(Dataset):
     def __init__(self, data):
@@ -21,9 +22,10 @@ class PromptDataset(Dataset):
         )
     
 class PromptDataModule(pl.LightningDataModule):
-    def __init__(self, prompts_file: str, n_samples: int, world_size: int, local_rank: int, num_workers: int = 27):
+    def __init__(self, prompts_file: str, data_dir: str, n_samples: int, world_size: int, local_rank: int, num_workers: int = 27):
         super().__init__()
         self.prompts_file = prompts_file
+        self.data_dir = Path(data_dir)
         self.n_samples = n_samples
         self.world_size = world_size
         self.local_rank = local_rank
@@ -33,12 +35,25 @@ class PromptDataModule(pl.LightningDataModule):
         prepend_phrase = "Neutral Gray Background, Wide-angle, high quality, detailed, ultrarealistic photography, "
         with open(self.prompts_file, 'r') as fp:
             self.all_prompts = json.load(fp)
-        for prompt in self.all_prompts:
-            if 'original_caption' in prompt and not prompt['original_caption'].startswith(prepend_phrase):
-                prompt['original_caption'] = prepend_phrase + prompt['original_caption']
-            if 'resulting_caption' in prompt and not prompt['resulting_caption'].startswith(prepend_phrase):
-                prompt['resulting_caption'] = prepend_phrase + prompt['resulting_caption']
-        self.my_prompts = [(i, prompt, self.n_samples) for i, prompt in enumerate(self.all_prompts)]
+        filtered_prompts = []
+        for i, prompt in enumerate(self.all_prompts):
+            prompt_folder = self.data_dir / f"{i:07d}"  # Assuming folder naming convention
+            if not prompt_folder.exists():
+                # Add prepend phrases if necessary
+                if 'original_caption' in prompt and not prompt['original_caption'].startswith(prepend_phrase):
+                    prompt['original_caption'] = prepend_phrase + prompt['original_caption']
+                if 'resulting_caption' in prompt and not prompt['resulting_caption'].startswith(prepend_phrase):
+                    prompt['resulting_caption'] = prepend_phrase + prompt['resulting_caption']
+                filtered_prompts.append((i, prompt, self.n_samples))
+
+        self.my_prompts = filtered_prompts
+        
+#         for prompt in self.all_prompts:
+#             if 'original_caption' in prompt and not prompt['original_caption'].startswith(prepend_phrase):
+#                 prompt['original_caption'] = prepend_phrase + prompt['original_caption']
+#             if 'resulting_caption' in prompt and not prompt['resulting_caption'].startswith(prepend_phrase):
+#                 prompt['resulting_caption'] = prepend_phrase + prompt['resulting_caption']
+#         self.my_prompts = [(i, prompt, self.n_samples) for i, prompt in enumerate(self.all_prompts)]
         
     def my_collate_fn(self, batch):
         indices, prompts, n_samples = zip(*batch)  # Unpack batch items

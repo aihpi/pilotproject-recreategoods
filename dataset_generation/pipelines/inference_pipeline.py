@@ -25,6 +25,7 @@ class PromptProcessor(pl.LightningModule):
         self.max_cfg = config.generation.cfg_max
         self.min_threshold = config.generation.p2p_threshold_min
         self.max_threshold = config.generation.p2p_threshold_max
+        print(f"Using similarity model: {config.similarity_model.name}")
         if config.similarity_model.name == "clip":
             self.similarity_model = ClipSimilarity(config.similarity_model.variant).cuda()
         elif config.similarity_model.name == "dino":

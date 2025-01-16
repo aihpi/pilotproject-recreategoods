@@ -12,7 +12,12 @@ from torch.utils.data.distributed import DistributedSampler
 class VIEScoreDataset(Dataset):
     def __init__(self, dataset_dir: str):
         self.dataset_dir = Path(dataset_dir)
-        self.folders = [folder for folder in self.dataset_dir.iterdir() if folder.is_dir()]
+        self.folders = [
+            folder for folder in self.dataset_dir.iterdir()
+            if folder.is_dir() 
+            and (folder / "metadata.jsonl").exists()
+            and not (folder / "viescores.json").exists()
+        ]
 
     def __len__(self):
         return len(self.folders)
@@ -22,8 +27,8 @@ class VIEScoreDataset(Dataset):
         metadata_path = folder / "metadata.jsonl"
         prompt_path = folder / "prompt.json"
 
-        if not metadata_path.exists() or not prompt_path.exists():
-            raise FileNotFoundError(f"Metadata or prompt.json missing in {folder}")
+        if not prompt_path.exists():
+            raise FileNotFoundError(f"Prompt.json missing in {folder}")
 
         # Load metadata and prompt
         with open(metadata_path, "r") as metadata_file:

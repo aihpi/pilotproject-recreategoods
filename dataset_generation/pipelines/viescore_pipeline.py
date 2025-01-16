@@ -51,14 +51,19 @@ class VIEScoreEvaluator(pl.LightningModule):
         """Remove images and metadata for seeds with overall_score below the threshold."""
         seeds_to_remove = [seed for seed, scores in viescores.items() if scores["overall_score"] < threshold]
         removed_scores = {}
+        removed_images_dir = prompt_dir / "removed_images"
+        removed_images_dir.mkdir(exist_ok=True)
 
         for seed in seeds_to_remove:
             image_0_path = prompt_dir.joinpath(f"{seed}_0.jpg")
             image_1_path = prompt_dir.joinpath(f"{seed}_1.jpg")
+            removed_image_0_path = removed_images_dir.joinpath(f"{seed}_0.jpg")
+            removed_image_1_path = removed_images_dir.joinpath(f"{seed}_1.jpg")
+
             if image_0_path.exists():
-                image_0_path.unlink()
+                image_0_path.rename(removed_image_0_path)
             if image_1_path.exists():
-                image_1_path.unlink()
+                image_1_path.rename(removed_image_1_path)
             if seed in viescores:
                 removed_scores[seed] = viescores.pop(seed)  # Move scores to removed_scores
 
@@ -86,8 +91,8 @@ class VIEScoreEvaluator(pl.LightningModule):
                 removed_scores.update(existing_removed_scores)  # Combine with existing scores
             with open(removed_viescores_path, "w") as fp:
                 json.dump(removed_scores, fp, indent=2)
-
-        print(f"Removed seeds saved to {removed_viescores_path}")
+        image_count = len(seeds_to_remove) * 2
+        print(f"Moved {len(seeds_to_remove)} seeds and {image_count} images")
 
     def test_step(self, batch, batch_idx):
         """Process a batch of prompts."""
