@@ -19,7 +19,8 @@ from diffusers.utils.torch_utils import randn_tensor
 from deepspeed.ops.adam import DeepSpeedCPUAdam
 from pipelines.inference_pipeline import FluxPix2PixPipeline
 import copy
-
+import lpips
+import torch.distributed as dist
 
 @staticmethod
 def _prepare_latent_image_ids(batch_size, height, width, device, dtype):
@@ -68,6 +69,8 @@ class InstructPix2PixModel(pl.LightningModule):
         self.noise_scheduler = None
         self.text_encoder = None
         self.weight_dtype = torch.bfloat16
+        self.lpips_fn = lpips.LPIPS(net='alex')
+        self.register_buffer("lpips_buffer", torch.zeros(1))
     
     
     def setup(self, stage=None):
@@ -127,7 +130,6 @@ class InstructPix2PixModel(pl.LightningModule):
                 text_encoder_2=self.text_encoder_2,
                 tokenizer_2=self.tokenizer_2,
             )
-        self.logger.experiment.define_metric("Validation Images", step_metric="global_step")
 
     def get_sigmas(self,timesteps, n_dim=4, dtype=torch.float32):
         sigmas = self.noise_scheduler.sigmas.to(device=self.device, dtype=dtype)
@@ -242,52 +244,63 @@ class InstructPix2PixModel(pl.LightningModule):
         self.logger.experiment.log(wandb_logs)
         return loss
     
+    def _get_lpips_mean(self, gen_images, gt_images):
+        gen_images_lpips = 2.0 * gen_images - 1.0
+        gt_images_lpips = 2.0 * gt_images - 1.0
+        lpips_values = self.lpips_fn.forward(gen_images_lpips, gt_images_lpips)
+        lpips_mean = lpips_values.mean()
+        return lpips_mean
+
+    def _get_inference_steps(self):
+        random_inference_steps = torch.randint(low=4, high=21, size=(1,), device=self.device)
+        gathered_steps = self.trainer.strategy.all_gather(random_inference_steps)
+        num_inference_steps = int(gathered_steps[0].item())
+        return num_inference_steps
+    
     def validation_step(self, batch, batch_idx):
-        # Perform reverse diffusion using FluxImg2ImgPipeline
-        if batch_idx == 0:  # Log only for the first batch in validation
-            with torch.no_grad():
-                
-                # Prepare inputs
-                in_pixel_values = batch["input_image"].to(dtype=self.vae.dtype)
-                prompts = batch["edit_instruction"]
+        with torch.no_grad():
+            num_inference_steps = self._get_inference_steps()
 
-                # Generate images using the pipeline
-                generated_output = self.pipeline(
-                    prompt=prompts,
-                    image=in_pixel_values,
-                    height=512,
-                    width=512,
-                    strength=1,  # Adjust strength to control transformation extent
-                    num_inference_steps=20,  # Number of denoising steps
-                    guidance_scale=4.5,  # Guidance scale
-                    num_images_per_prompt=1,
-                    generator=None,  # Optionally set for deterministic results
-                    output_type="pt",  # Get images as PIL objects
-                )
-                if self.trainer.is_global_zero:
-                    # Create a grid for generated images
-                    generated_grid = make_grid(generated_output, nrow=4)
+            in_pixel_values = batch["input_image"].to(dtype=self.vae.dtype)
+            prompts = batch["edit_instruction"]
+            generated_output = self.pipeline(
+                prompt=prompts,
+                image=in_pixel_values,
+                height=512,
+                width=512,
+                strength=1,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=4.5,
+                num_images_per_prompt=1,
+                generator=None,
+                output_type="pt",
+            )
 
-                    # Create a grid for input images
-                    input_grid = make_grid(batch["input_image"].to(dtype=torch.float32), nrow=4)
+            gt_images = batch["output_image"].to(dtype=torch.bfloat16, device=generated_output.device)
+            gen_images = generated_output.to(dtype=torch.bfloat16, device=generated_output.device)
+            lpips_mean = self._get_lpips_mean(gen_images, gt_images)
+            self.log("val_lpips", lpips_mean, on_step=False, on_epoch=True, sync_dist=True, batch_size=in_pixel_values.shape[0])
 
-                    # Create a grid for output images (ground truth)
-                    output_grid = make_grid(batch["output_image"].to(dtype=torch.float32), nrow=4)
+            if batch_idx == 0 and self.trainer.is_global_zero:
+                generated_grid = make_grid(gen_images, nrow=4)
+                input_grid = make_grid(batch["input_image"].float(), nrow=4)
+                output_grid = make_grid(gt_images, nrow=4)
+                edit_instructions = batch["edit_instruction"]
+                # Log to WandB
+                self.logger.experiment.log({
+                    "Validation Generated Images": wandb.Image(generated_grid, caption=edit_instructions),
+                    "Validation Input Images": wandb.Image(input_grid, caption="Input Images"),
+                    "Validation Output Images": wandb.Image(output_grid, caption="Ground Truth Images"),
+                })
 
-                    # Prepare the captions for the edit instructions
-                    edit_instructions = batch["edit_instruction"]
+        # Cleanup
+        del generated_output, in_pixel_values, prompts, gen_images, gt_images
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        self.transformer.train()
 
-                    # Log all images to WandB
-                    self.logger.experiment.log({
-                        "Validation Generated Images": wandb.Image(generated_grid, caption=edit_instructions),
-                        "Validation Input Images": wandb.Image(input_grid, caption="Input Images"),
-                        "Validation Output Images": wandb.Image(output_grid, caption="Ground Truth Images"),
-                    })
-            del generated_output, in_pixel_values, prompts
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-            self.transformer.train()
         return {}
+
     
     def configure_optimizers(self):
         optimizer = DeepSpeedCPUAdam(self.transformer.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)

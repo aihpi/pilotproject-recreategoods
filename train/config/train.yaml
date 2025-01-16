@@ -4,7 +4,7 @@ data:
   data_dir: "/home/felix.boelter/recreategoods/dataset_generation/data/split-data"
   min_resize_res: 256
   max_resize_res: 256
-  crop_res: 512
+  valid_test_res: 512
   flip_prob: 0.5
 
 model:
@@ -20,4 +20,4 @@ model:
 
 training:
   gpus: 1
-  precision: "bf16"
+  precision: "bf16-mixed"

@@ -3,6 +3,7 @@ from dataloader.data_module import FLUXDataModule
 from pipelines.train_pipeline import InstructPix2PixModel
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 import argparse
 from omegaconf import OmegaConf
 import os
@@ -40,7 +41,7 @@ def main():
         data_dir=data_config["data_dir"],
         min_resize_res=data_config["min_resize_res"],
         max_resize_res=data_config["max_resize_res"],
-        crop_res=data_config["crop_res"],
+        valid_test_res=data_config["valid_test_res"],
         flip_prob=data_config["flip_prob"],
     )
 
@@ -54,12 +55,21 @@ def main():
         name="flux-model-run",
         log_model=True, 
     )
+    checkpoint_callback = ModelCheckpoint(
+        dirpath="checkpoints/",        
+        filename="{epoch}-{step}",     
+        save_top_k=1,                 
+        every_n_epochs=1,              
+        monitor="val_lpips",          
+        mode="min",
+        save_last=True,              # optionally always save a "last.ckpt" on every epoch
+    )
 
-    # Set up the trainer
-    mixed_precision_config = MixedPrecision(
-        param_dtype=torch.bfloat16,
-        reduce_dtype=torch.bfloat16,
-        buffer_dtype=torch.bfloat16
+    early_stopping_callback = EarlyStopping(
+        monitor="val_lpips",
+        patience=10,            
+        mode="min",            
+        verbose=True,
     )
     training_config = config["training"]
     trainer = Trainer(
@@ -75,8 +85,9 @@ def main():
         logger=wandb_logger,
         gradient_clip_val=1.0,
         gradient_clip_algorithm="norm",
-        val_check_interval=32,
+        val_check_interval=64,
         log_every_n_steps=2, 
+        callbacks=[checkpoint_callback, early_stopping_callback],
     )
 
     trainer.fit(model, datamodule=data_module)

@@ -12,7 +12,7 @@ import torchvision.transforms.functional as F
 
 
 class EditDataset(Dataset):
-    def __init__(self, path, metadata_file, min_resize_res, max_resize_res, crop_res, flip_prob=0.0, to_transform=True):
+    def __init__(self, path, metadata_file, min_resize_res, max_resize_res, flip_prob=0.0, to_transform=True):
         """
         Dataset for image editing tasks.
 
@@ -28,7 +28,6 @@ class EditDataset(Dataset):
         self.metadata_file = Path(metadata_file)
         self.min_resize_res = min_resize_res
         self.max_resize_res = max_resize_res
-        self.crop_res = crop_res
         self.flip_prob = flip_prob
         # Load metadata
         with open(self.metadata_file, "r") as f:
@@ -40,7 +39,7 @@ class EditDataset(Dataset):
     def __len__(self):
         return len(self.metadata)
     
-    def paired_transform(self, input_image, output_image):
+    def paired_transform(self, input_image, output_image, normalize=True):
         if random.random() < self.flip_prob:
             input_image = F.hflip(input_image)
             output_image = F.hflip(output_image)
@@ -51,10 +50,12 @@ class EditDataset(Dataset):
         input_image = F.to_tensor(input_image)
         output_image = F.to_tensor(output_image)
 
-        input_image = 2.0 * input_image - 1.0
-        output_image = 2.0 * output_image - 1.0
+        if normalize:
+            input_image = 2.0 * input_image - 1.0
+            output_image = 2.0 * output_image - 1.0
 
         return input_image, output_image
+    
     def __getitem__(self, idx):
         """
         Get an item from the dataset.
@@ -79,8 +80,7 @@ class EditDataset(Dataset):
         if self.to_transform:
             input_image, output_image = self.paired_transform(input_image, output_image)
         else:
-            input_image = transforms.ToTensor()(input_image)
-            output_image = transforms.ToTensor()(output_image)
+            input_image, output_image = self.paired_transform(input_image, output_image, normalize=False)
 
         edit_instruction = item["edit_instruction"]
 
@@ -91,7 +91,7 @@ class EditDataset(Dataset):
         }
 
 class FLUXDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size, num_workers, data_dir, min_resize_res, max_resize_res, crop_res, flip_prob):
+    def __init__(self, batch_size, num_workers, data_dir, min_resize_res, max_resize_res, valid_test_res, flip_prob):
         """
         Data module for FLUX training, validation, and testing.
 
@@ -111,7 +111,7 @@ class FLUXDataModule(pl.LightningDataModule):
         self.data_dir = Path(data_dir)
         self.min_resize_res = min_resize_res
         self.max_resize_res = max_resize_res
-        self.crop_res = crop_res
+        self.valid_test_res = valid_test_res
         self.flip_prob = flip_prob
 
     def setup(self, stage=None):
@@ -127,15 +127,13 @@ class FLUXDataModule(pl.LightningDataModule):
                 metadata_file=os.path.join(self.data_dir, "train", "train_metadata.json"),
                 min_resize_res=self.min_resize_res,
                 max_resize_res=self.max_resize_res,
-                crop_res=self.crop_res,
                 flip_prob=self.flip_prob,
             )
             self.val_dataset = EditDataset(
                 path=self.data_dir / "val",
                 metadata_file=os.path.join(self.data_dir, "val", "val_metadata.json"),
-                min_resize_res=self.min_resize_res,
-                max_resize_res=self.max_resize_res,
-                crop_res=self.crop_res,
+                min_resize_res=self.valid_test_res,
+                max_resize_res=self.valid_test_res,
                 flip_prob=0.0,  
                 to_transform=False,
             )
@@ -143,9 +141,8 @@ class FLUXDataModule(pl.LightningDataModule):
             self.test_dataset = EditDataset(
                 path=self.data_dir / "test",
                 metadata_file=os.path.join(self.data_dir, "test", "test_metadata.json"),
-                min_resize_res=self.min_resize_res,
-                max_resize_res=self.max_resize_res,
-                crop_res=self.crop_res,
+                min_resize_res=self.valid_test_res,
+                max_resize_res=self.valid_test_res,
                 flip_prob=0.0, 
                 to_transform=False,
             )
