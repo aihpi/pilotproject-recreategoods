@@ -75,7 +75,7 @@ def main():
         logger=wandb_logger,
         gradient_clip_val=1.0,
         gradient_clip_algorithm="norm",
-        val_check_interval=100,
+        val_check_interval=32,
         log_every_n_steps=2, 
     )
 

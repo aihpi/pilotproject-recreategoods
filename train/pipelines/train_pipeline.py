@@ -65,7 +65,7 @@ class InstructPix2PixModel(pl.LightningModule):
         self.args = args
         self.transformer = None
         self.vae = None
-        self.scheduler = None
+        self.noise_scheduler = None
         self.text_encoder = None
         self.weight_dtype = torch.bfloat16
     
@@ -90,7 +90,7 @@ class InstructPix2PixModel(pl.LightningModule):
             )
         self.transformer = models["transformer"].to(self.device)
         self.vae = models["vae"].to("cpu")
-        self.scheduler = models["scheduler"]
+        self.noise_scheduler = models["scheduler"]
         self.text_encoder = models["text_encoder"]
         self.tokenizer = models["tokenizer"]
         self.text_encoder_2 = models["text_encoder_2"]
@@ -117,7 +117,7 @@ class InstructPix2PixModel(pl.LightningModule):
         self.text_encoder_2.requires_grad_(False)
          # Initialize the FluxImg2ImgPipeline
         with torch.no_grad():
-            scheduler_copy = copy.deepcopy(self.scheduler)
+            scheduler_copy = copy.deepcopy(self.noise_scheduler)
             self.pipeline = FluxPix2PixPipeline(
                 transformer=self.transformer,
                 vae=self.vae,
@@ -130,8 +130,8 @@ class InstructPix2PixModel(pl.LightningModule):
         self.logger.experiment.define_metric("Validation Images", step_metric="global_step")
 
     def get_sigmas(self,timesteps, n_dim=4, dtype=torch.float32):
-        sigmas = self.scheduler.sigmas.to(device=self.device, dtype=dtype)
-        schedule_timesteps = self.scheduler.timesteps.to(self.device)
+        sigmas = self.noise_scheduler.sigmas.to(device=self.device, dtype=dtype)
+        schedule_timesteps = self.noise_scheduler.timesteps.to(self.device)
         timesteps = timesteps.to(self.device)
         step_indices = [(schedule_timesteps == t).nonzero().item() for t in timesteps]
 
@@ -173,8 +173,8 @@ class InstructPix2PixModel(pl.LightningModule):
             logit_std=1.0,
             mode_scale=1.29,
         )
-        indices = (u * self.scheduler.config.num_train_timesteps).long()
-        timesteps = self.scheduler.timesteps[indices].to(device=model_input.device)
+        indices = (u * self.noise_scheduler.config.num_train_timesteps).long()
+        timesteps = self.noise_scheduler.timesteps[indices].to(device=model_input.device)
      
         # Add noise according to flow matching.
         # zt = (1 - texp) * x + texp * z1
@@ -232,7 +232,6 @@ class InstructPix2PixModel(pl.LightningModule):
         
 
     def training_step(self, batch, batch_idx):
-        
         pred_noise, target_noise, weight = self(batch)
         loss = (weight * F.mse_loss(pred_noise, target_noise)).mean()
         self.log("train_loss", loss, prog_bar=True)
@@ -293,40 +292,12 @@ class InstructPix2PixModel(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = DeepSpeedCPUAdam(self.transformer.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.max_epochs)
-        return [optimizer], [scheduler]
-    
-    # @staticmethod
-    # def test_forward_backward_single_image(
-    #     model, scheduler, x0, t_index=100
-    #     ):
-    #     """
-    #     x0: a single latent or small batch of latents
-    #     t_index: an integer index in [0, num_train_timesteps)
-    #     """
-    #     # 1. Forward step: x0 -> x_t
-    #     # pick the actual t from the scheduler
-    #     t = scheduler.timesteps[t_index]
-    #     sigma_t = scheduler.sigmas[t_index]
-        
-    #     # your forward formula
-    #     noise = torch.randn_like(x0)
-    #     x_t = (1.0 - sigma_t) * x0 + sigma_t * noise
-
-    #     # 2. Model predicts noise or something else
-    #     noise_pred = model(
-    #         # depends on your architecture
-    #         torch.cat([x_t, ...], dim=?),  # or whatever input structure
-    #         t / 1000.0
-    #     )
-
-    #     # 3. Reverse step: x_t -> x0_hat
-    #     # you can replicate exactly how your inference scheduler does "step"
-    #     x0_hat = scheduler.step(noise_pred, t, x_t, return_dict=False)[0]
-
-    #     # Now check how close x0_hat is to x0
-    #     mse = (x0_hat - x0).square().mean().item()
-    #     print(f"Forward-backward MSE at t={t_index}: {mse}")
-    #     return x_t, x0_hat, mse
+        scheduler_dict = {
+            "scheduler": scheduler,
+            "interval": "epoch",  
+            "frequency": 1        
+        }
+        return [optimizer], [scheduler_dict]
 
     def log_sample_images(self, input_images, reconstructed_images, prompts):
         """
