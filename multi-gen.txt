@@ -1,0 +1,68 @@
+#!/bin/bash -eux
+
+#SBATCH --nodes=2
+#SBATCH --gpus-per-node=8
+#SBATCH --job-name=Gen-Data
+#SBATCH --output=logs/%j/debug_output.log
+#SBATCH --error=logs/%j/debug_error.log
+#SBATCH --time=128:00:00
+#SBATCH --exclusive
+#SBATCH --mem=0
+#SBATCH --ntasks-per-node=1
+#SBATCH --container-writable
+
+export NCCL_IB_DISABLE=0
+export NCCL_IB_CUDA_SUPPORT=1
+export NCCL_DEBUG=INFO
+
+# Environment variables for NCCL and distributed training
+export SLURM_DEBUG=verbose
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export SHARED_STORAGE_ROOT=/home/felix.boelter/
+export CONTAINER_WORKSPACE_MOUNT=$SHARED_STORAGE_ROOT/recreategoods/dataset_generation
+export CONTAINER_IMAGE=nvcr.io/nvidia/pytorch:24.01-py3
+export CONTAINER_NAME=gen-data
+
+export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n1)
+export MASTER_PORT=$(( RANDOM % (50000 - 30000 + 1 ) + 30000 ))
+export GPUS_PER_NODE=${SLURM_GPUS_PER_NODE:-8}
+export NNODES=${SLURM_NNODES:-1}
+export NUM_PROCESSES=$(expr $NNODES \* $GPUS_PER_NODE)
+export MULTIGPU_FLAG="--multi_gpu"
+export HF_HOME=/home/felix.boelter/.huggingface
+
+if [ $NNODES == "1" ]
+then
+        export MULTIGPU_FLAG=""
+fi
+
+echo "MASTER_ADDR: $MASTER_ADDR"
+echo "MASTER_PORT: $MASTER_PORT"
+echo "GPUS_PER_NODE: $GPUS_PER_NODE"
+echo "NNODES: $NNODES"
+echo "NUM_PROCESSES: $NUM_PROCESSES"
+
+srun hostname
+srun echo $SLURM_CPUS_ON_NODE
+srun echo $SLURM_NODEID
+
+
+# Run training
+srun -l --container-image $CONTAINER_IMAGE \
+        --container-name $CONTAINER_NAME \
+        --container-mounts $CONTAINER_WORKSPACE_MOUNT:/workspace,/dev/infiniband:/dev/infiniband \
+        --container-writable \
+        --container-workdir /workspace \
+        --container-mount-home \
+        --export=ALL \
+        bash -c 'python -m pip install --upgrade pip && pip install -r requirements-slurm.txt && torchrun --nproc_per_node=8 run.py --config_path configs/shuttle_config.yaml --num_nodes 2'
+
+# Explicitly cancel the job if it lingers
+if [[ $? -eq 0 ]]; then
+    echo "Job completed successfully."
+else
+    echo "Job failed."
+fi
+
+# Ensure cancellation
+scancel $SLURM_JOB_ID

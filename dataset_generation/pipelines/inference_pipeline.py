@@ -8,8 +8,10 @@ from metrics.clip_similarity import ClipSimilarity
 from metrics.dinov2 import DINOv2Similarity
 import torch
 import json
+import logging
 import numpy as np
 from typing import Dict
+import os
 from tqdm import tqdm
 
 
@@ -23,6 +25,7 @@ class PromptProcessor(pl.LightningModule):
         self.max_cfg = config.generation.cfg_max
         self.min_threshold = config.generation.p2p_threshold_min
         self.max_threshold = config.generation.p2p_threshold_max
+        print(f"Using similarity model: {config.similarity_model.name}")
         if config.similarity_model.name == "clip":
             self.similarity_model = ClipSimilarity(config.similarity_model.variant).cuda()
         elif config.similarity_model.name == "dino":
@@ -42,8 +45,6 @@ class PromptProcessor(pl.LightningModule):
         ).to("cuda")
         self.pipe.load_lora_weights(config.model.lora_weights)
         self.pipe.set_progress_bar_config(disable=True)
-
-        self.overall_score_threshold = config.sim_thresholds.overall_score_threshold
 
 
     def compute_similarity(self, image_0, image_1, prompt_0, prompt_1):
@@ -112,34 +113,34 @@ class PromptProcessor(pl.LightningModule):
                 with open(prompt_dir.joinpath(f"metadata.jsonl"), "a") as fp:
                     fp.write(f"{json.dumps(dict(seed=seed, **result))}\n")
 
-    @staticmethod
-    def remove_low_score_images(results: Dict, prompt_dir: Path, viescores: Dict, threshold: float):
-        """Remove images and metadata for seeds with overall_score below the threshold."""
-        seeds_to_remove = [seed for seed, scores in viescores.items() if scores["overall_score"] < threshold]
-        for seed in seeds_to_remove:
-            image_0_path = prompt_dir.joinpath(f"{seed}_0.jpg")
-            image_1_path = prompt_dir.joinpath(f"{seed}_1.jpg")
-            if image_0_path.exists():
-                image_0_path.unlink()
-            if image_1_path.exists():
-                image_1_path.unlink()
-            if seed in results:
-                del results[seed]
-            if seed in viescores:
-                del viescores[seed]
-        # Update metadata.jsonl
-        metadata_path = prompt_dir.joinpath("metadata.jsonl")
-        if metadata_path.exists():
-            with open(metadata_path, "r") as fp:
-                metadata_entries = [json.loads(line) for line in fp]
-            metadata_entries = [entry for entry in metadata_entries if entry["seed"] not in seeds_to_remove]
-            with open(metadata_path, "w") as fp:
-                for entry in metadata_entries:
-                    fp.write(f"{json.dumps(entry)}\n")
-        # Write updated viescores to viescores.json
-        viescores_path = prompt_dir / "viescores.json"
-        with open(viescores_path, "w") as viescores_file:
-            json.dump(viescores, viescores_file, indent=2)
+    # @staticmethod
+    # def remove_low_score_images(results: Dict, prompt_dir: Path, viescores: Dict, threshold: float):
+    #     """Remove images and metadata for seeds with overall_score below the threshold."""
+    #     seeds_to_remove = [seed for seed, scores in viescores.items() if scores["overall_score"] < threshold]
+    #     for seed in seeds_to_remove:
+    #         image_0_path = prompt_dir.joinpath(f"{seed}_0.jpg")
+    #         image_1_path = prompt_dir.joinpath(f"{seed}_1.jpg")
+    #         if image_0_path.exists():
+    #             image_0_path.unlink()
+    #         if image_1_path.exists():
+    #             image_1_path.unlink()
+    #         if seed in results:
+    #             del results[seed]
+    #         if seed in viescores:
+    #             del viescores[seed]
+    #     # Update metadata.jsonl
+    #     metadata_path = prompt_dir.joinpath("metadata.jsonl")
+    #     if metadata_path.exists():
+    #         with open(metadata_path, "r") as fp:
+    #             metadata_entries = [json.loads(line) for line in fp]
+    #         metadata_entries = [entry for entry in metadata_entries if entry["seed"] not in seeds_to_remove]
+    #         with open(metadata_path, "w") as fp:
+    #             for entry in metadata_entries:
+    #                 fp.write(f"{json.dumps(entry)}\n")
+    #     # Write updated viescores to viescores.json
+    #     viescores_path = prompt_dir / "viescores.json"
+    #     with open(viescores_path, "w") as viescores_file:
+    #         json.dump(viescores, viescores_file, indent=2)
 
     def test_step(self, batch, batch_idx):
         def create_scale(min, max):
@@ -214,33 +215,5 @@ class PromptProcessor(pl.LightningModule):
             pbar.update(1)
         # Save results using the utility method
         self.save_results(results, prompt_dir, self.sim_thresholds)
-
-        # Compute VIEScore for the generated images
-        viescores = {}
-        for seed, result in results.items():
-            image1 = images[0]
-            image2 = images[1]
-            text_prompt = prompt["edit_instruction"]
-            try:
-                score_list = self.viescore.evaluate([image1, image2], text_prompt)
-                sementics_score, quality_score, overall_score, edit = score_list
-                viescores[seed] = {
-                    "sementics_score": sementics_score,
-                    "quality_score": quality_score,
-                    "overall_score": overall_score,
-                    "edit_instruction": edit
-                }
-            except Exception as e:
-                print(f"Error computing VIEScore for seed {seed} in folder {prompt_dir}: {e}")
-                continue
-
-        # Save VIEScores to a JSON file
-        viescores_path = prompt_dir / "viescores.json"
-        with open(viescores_path, "w") as viescores_file:
-            json.dump(viescores, viescores_file, indent=2)
-        print(f"Saved VIEScores to {viescores_path}")
-
-        # Remove low score images and update metadata
-        self.remove_low_score_images(results, prompt_dir, viescores, self.overall_score_threshold)
 
         return results

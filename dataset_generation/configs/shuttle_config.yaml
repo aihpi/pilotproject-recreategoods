@@ -1,7 +1,7 @@
 # Configuration for dataset generation with the Shuttle model, Prompt-to-Prompt and diffusion pipeline
 
-output_dir: "./data/dataset-full-4"
-prompts_file: "./data/full_data.json"
+output_dir: "./data/dataset"
+prompts_file: "./data/examples.json"
 
 # Settings for GPU usage
 gpu:
@@ -12,7 +12,7 @@ num_workers: 8  # Number of workers for data loading
 # Settings for image generation
 generation:
   steps: 4 # Number of diffusion steps
-  n_samples: 200 # Number of samples to generate for each prompt
+  n_samples: 50 # Number of samples to generate for each prompt
   cfg_min: 3.5 # Minimum value for classifier-free guidance (CFG) scale
   cfg_max: 15  # Maximum value for classifier-free guidance (CFG) scale
   p2p_threshold_min: 0.1  # Minimum threshold for Prompt-to-Prompt attention replacement
@@ -28,13 +28,18 @@ attention:
   suppression_factor: 1.0  # Factor to suppress specified self-attention weights
 
 # Thresholds for CLIP-based filtering of generated images
-clip_thresholds:
+sim_thresholds:
   enable_filtering: True  # Enable or disable CLIP-based filtering
   max_out_samples: 10  # Maximum number of samples to retain based on CLIP similarity
-  clip_threshold: 0.2  # General CLIP similarity threshold
-  clip_dir_threshold: 0.2  # Threshold for directional CLIP similarity
-  clip_img_threshold: 0.7  # Threshold for image-based CLIP similarity
+  clip_threshold: 0.2  # General CLIP text to image similarity threshold
+  dir_threshold: 0.2  # Threshold for directional similarity
+  img_threshold: 0.95  # Threshold for image-based similarity
+  overall_score_threshold: 2  # Threshold for the overall similarity score
 
+similarity_model:
+  name: "dino"  # Options: "clip", "dino"
+  variant: "ViT-L/14"  # For ClipSimilarity
+  
 model:
   name: "shuttleai/shuttle-3.1-aesthetic" # Pretrained model identifier (Hugging Face model hub)
   lora_weights: "aihpi/flux-fashion-lora" # Path or Hugging Face repo for LoRA weights

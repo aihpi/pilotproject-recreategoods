@@ -5,13 +5,17 @@ from utils.config_loader import load_config
 import argparse
 import lightning as pl
 from lightning.pytorch.strategies import FSDPStrategy
-from data_module import PromptDataModule
-from inference_pipeline import PromptProcessor
+from dataloaders.data_module import PromptDataModule
+from dataloaders.vie_data_module import VIEScoreDataModule
+from pipelines.inference_pipeline import PromptProcessor
+from pipelines.viescore_pipeline import VIEScoreEvaluator
 import torch
+import gc
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str, required=True)
+    parser.add_argument("--num_nodes", type=int, default=1, help="Number of nodes to use (default: 1)")
     args = parser.parse_args()
     config = load_config(args.config_path)
     # Set CUDA_VISIBLE_DEVICES based on config
@@ -32,6 +36,7 @@ def main():
     # Initialize Data Module
     datamodule = PromptDataModule(
         prompts_file=config.prompts_file,
+        data_dir=config.output_dir,
         n_samples=config.generation.n_samples,
         world_size=world_size,
         local_rank=local_rank,
@@ -48,6 +53,7 @@ def main():
     # Configure Trainer for Inference
     trainer = pl.Trainer(
         devices='auto',
+        num_nodes=args.num_nodes,
         accelerator="gpu",
         strategy=FSDPStrategy(),
         max_epochs=1,
@@ -56,6 +62,21 @@ def main():
     )
 
     trainer.test(model, datamodule)
+
+    del model
+    del datamodule
+    torch.cuda.empty_cache()
+    gc.collect()
+    
+    vie_datamodule = VIEScoreDataModule(
+        dataset_dir=config.output_dir,
+        world_size=world_size,
+        local_rank=local_rank,
+        num_workers=config.num_workers
+    )
+    vie_model = VIEScoreEvaluator(config)
+    
+    trainer.test(vie_model, vie_datamodule)
 
 if __name__ == "__main__":
     main()

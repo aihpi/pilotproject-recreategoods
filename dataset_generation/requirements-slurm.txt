@@ -1,0 +1,37 @@
+    # Image processing and augmentation
+albumentations==0.4.3
+opencv-python>=4.5.0
+imageio==2.9.0
+imageio-ffmpeg==0.4.2
+
+# Dataset and Diffusion libraries
+datasets==2.8.0
+diffusers==0.31.0
+
+# Debugging and visualization tools
+pudb==2019.2
+streamlit>=0.73.1
+
+# PyTorch ecosystem
+lightning==2.4.0
+torchmetrics>=0.7.0,<3.0
+torch-fidelity==0.3.0
+test-tube>=0.7.5
+einops>=0.3.0
+kornia==0.6
+
+# Transformers and model fine-tuning
+transformers>=4.19.2
+sentencepiece==0.2.0
+peft==0.14.0
+
+# Configuration management
+omegaconf==2.3.0
+
+# Watermarking tool
+invisible-watermark
+
+# Git-based repositories
+taming-transformers @ git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
+clip @ git+https://github.com/openai/CLIP.git@main#egg=clip
+k-diffusion @ git+https://github.com/crowsonkb/k-diffusion.git
