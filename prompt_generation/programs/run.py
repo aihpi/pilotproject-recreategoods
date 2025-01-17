@@ -3,12 +3,12 @@ from loguru import logger
 import pandas as pd
 import json
 
-from prompt_generate.programs.personas import personas
+from programs.personas import personas
 
-from prompt_generate.programs.step0_generate_original_captions.program import GenerateOriginalCaptionsModule
-from prompt_generate.programs.step1_generate_edit_instructions.program import GenerateEditInstructionsModule
-from prompt_generate.programs.step2_generate_edited_caption.program import GenerateEditedCaptionModule
-from prompt_generate.programs.step3_asses_generated_edit_caption_examples.program import ValidateEditedCaptionModule
+from programs.step0_generate_original_captions.program import GenerateOriginalCaptionsModule
+from programs.step1_generate_edit_instructions.program import GenerateEditInstructionsModule
+from programs.step2_generate_edited_caption.program import GenerateEditedCaptionModule
+from programs.step3_asses_generated_edit_caption_examples.program import ValidateEditedCaptionModule
 
 # llama3.2:1b, llama3.1:8b, qwen2.5:14b
 models = ['ollama_chat/qwen2.5:14b', 'ollama_chat/llama3.1:8b']

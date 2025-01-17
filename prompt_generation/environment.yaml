@@ -1,4 +1,4 @@
-name: dspy_env
+name: prompt_generation
 channels:
   - defaults
   - https://repo.anaconda.com/pkgs/main
