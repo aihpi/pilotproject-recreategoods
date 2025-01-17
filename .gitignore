@@ -5,6 +5,7 @@
 dataset_generation/lightning_logs/
 .vscode/
 dataset_generation/data/*/
+*.csv
 pix2pix/data/
 _*.*
 *.pem
