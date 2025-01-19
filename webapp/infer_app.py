@@ -342,14 +342,14 @@ def main(
                         is_schnell=is_schnell,
                     )
 
-                    image = Image.open(st.session_state.uploaded_image).convert("RGB")
+                    # image = Image.open(st.session_state.uploaded_image).convert("RGB")
                     transform = transforms.Compose(
                         [
                             transforms.ToTensor(),
                             transforms.Lambda(lambda x: 2.0 * x - 1.0),
                         ]
                     )
-                    img: torch.Tensor = transform(image)
+                    img: torch.Tensor = transform(st.session_state.uploaded_image)
                     init_image = img[None, ...]
                     image2image_strength = 0.8 # TODO: st.number_input("Noising strength", min_value=0.0, max_value=1.0, value=0.8)
                     if init_image is not None:
@@ -358,12 +358,12 @@ def main(
                     resize_img = True # TODO: st.checkbox("Resize image", False)
 
                     # allow for packing and conversion to latent space
-                    width = int(
-                        16 * (st.number_input("Width", min_value=128, value=1360, step=16, disabled=not resize_img) // 16)
-                    )
-                    height = int(
-                        16 * (st.number_input("Height", min_value=128, value=768, step=16, disabled=not resize_img) // 16)
-                    )
+                    width = 1360 # TODO: int(
+                    #     16 * (st.number_input("Width", min_value=128, value=1360, step=16, disabled=not resize_img) // 16)
+                    # )
+                    height = 768 # TODO: int(
+                    #     16 * (st.number_input("Height", min_value=128, value=768, step=16, disabled=not resize_img) // 16)
+                    # )
                     num_steps = 4 if is_schnell else 50  # TODO: int(st.number_input("Number of steps", min_value=1, value=(4 if is_schnell else 50)))
                     guidance = 3.5 # TODO: float(st.number_input("Guidance", min_value=1.0, value=3.5, disabled=is_schnell))
                     seed_str = "123456" # TODO: st.text_input("Seed", disabled=is_schnell)
