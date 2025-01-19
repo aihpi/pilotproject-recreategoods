@@ -1,0 +1,11 @@
+name: webapp
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - streamlit>=1.31.0
+  - pillow>=10.0.0
+  - pip
+  - pip:
+    - streamlit-scroll-to-top 
