@@ -1,0 +1,13 @@
+{
+    "include": [
+        "webapp",
+        "pix2pix"
+    ],
+    "extraPaths": [
+        ".",
+        "./pix2pix",
+        "./webapp"
+    ],
+    "typeCheckingMode": "off",
+    "useLibraryCodeForTypes": true
+} 
