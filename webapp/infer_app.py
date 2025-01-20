@@ -1,3 +1,6 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+
 import time
 import streamlit as st
 from PIL import ExifTags, Image, ImageFile
@@ -29,9 +32,16 @@ from flux.util import (
 )
 
 NSFW_THRESHOLD = 0.85
-HISTORY_DIR = "history"
+BASE_DIR = os.path.dirname(__file__)
+HISTORY_DIR = os.path.join(BASE_DIR, "history")
     
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+def clear_gpu_memory():
+    """Clear GPU memory and cache."""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
 @st.cache_resource()
 def get_models(name: str, device: torch.device, offload: bool, is_schnell: bool):
@@ -48,16 +58,27 @@ def main(
     offload: bool = False,
     output_dir: str = "output",
 ):
+    print(f"Using device: {device}")
     if not os.path.exists(HISTORY_DIR):
         os.makedirs(HISTORY_DIR)
     HISTORY_FILE = os.path.join(HISTORY_DIR, "generation_history.json")
 
+    # Clear GPU memory when starting new session
+    clear_gpu_memory()
+    
     st.set_page_config(
         page_title="recreategoods",
         page_icon="🪡",
         layout="wide"
     )
 
+    # Register session state cleanup
+    if 'initialized' not in st.session_state:
+        st.session_state.initialized = True
+        def cleanup():
+            clear_gpu_memory()
+        st.session_state.cleanup = cleanup
+    
     torch_device = torch.device(device)
     
     if 'scroll_to_top' not in st.session_state:
@@ -322,6 +343,11 @@ def main(
         selected_model = st.selectbox("Select the AI model to use", 
                                     model_options,
                                     index=model_options.index(st.session_state.selected_model))
+        if selected_model != st.session_state.selected_model:
+            # Only clear memory when actually switching models
+            if 'model' in st.session_state:
+                clear_gpu_memory()
+                st.cache_resource.clear()
         st.session_state.selected_model = selected_model
         
         st.markdown('<p class="step-header">Step 4: Generate</p>', unsafe_allow_html=True)
@@ -486,6 +512,14 @@ def main(
 
                     t1 = time.perf_counter()
 
+                    # Only clear GPU memory if we're switching models or if memory usage is high
+                    if torch.cuda.max_memory_allocated() > 0.9 * torch.cuda.get_device_properties(0).total_memory:
+                        model = model.cpu()
+                        t5 = t5.cpu()
+                        clip = clip.cpu()
+                        ae = ae.cpu()
+                        torch.cuda.empty_cache()
+                    
                     fn = output_name.format(idx=idx)
                     print(f"Done in {t1 - t0:.1f}s.")
                     # bring into PIL format and save

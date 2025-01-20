@@ -1,13 +1,15 @@
 name: webapp
 channels:
   - pytorch
+  - nvidia
   - conda-forge
   - defaults
 dependencies:
   - python=3.10
   - streamlit>=1.31.0
   - pillow>=10.0.0
-  - pytorch
+  - pytorch>=2.5.1
+  - pytorch-cuda=12.1
   - torchvision
   - numpy
   - einops
@@ -17,7 +19,6 @@ dependencies:
   - pip:
     - streamlit-scroll-to-top
     - transformers[torch,sentencepiece]>=4.31.0
-    - torch
     - safetensors
     - invisible-watermark
     - sentencepiece
