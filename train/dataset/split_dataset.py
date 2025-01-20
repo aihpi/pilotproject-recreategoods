@@ -3,7 +3,10 @@ from pathlib import Path
 from torch.utils.data import random_split
 from PIL import Image
 import shutil
-
+from argparse import ArgumentParser
+from tqdm.auto import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 
 class ImageEditDataset:
     def __init__(self, dataset_dir):
@@ -76,7 +79,7 @@ class ImageEditDataset:
         return self.samples.get(class_name, [])
 
 
-def prepare_split_datasets_by_folder(dataset_dir, output_dir, train_ratio=0.8, val_ratio=0.1):
+def prepare_split_datasets_by_folder(dataset_dir, output_dir, train_ratio=0.9, val_ratio=0.05):
     """
     Prepares train, validation, and test splits based on class folders.
 
@@ -120,6 +123,33 @@ def prepare_split_datasets_by_folder(dataset_dir, output_dir, train_ratio=0.8, v
     # Save the split datasets into folders and create metadata JSON
     save_split_datasets_to_folders(dataset, splits, output_dir)
 
+def copy_sample(sample, class_dir):
+    """
+    Copies input and output images to the class directory.
+
+    Args:
+        sample (dict): Dictionary containing sample metadata.
+        class_dir (Path): Target directory for the class.
+
+    Returns:
+        dict: Updated metadata with relative paths.
+    """
+    input_image_path = class_dir / sample["input_image"].name
+    output_image_path = class_dir / sample["output_image"].name
+
+    # Copy images
+    shutil.copy(sample["input_image"], input_image_path)
+    shutil.copy(sample["output_image"], output_image_path)
+
+    # Return metadata with relative paths
+    return {
+        "input_image": f"{class_dir.name}/{sample['input_image'].name}",
+        "output_image": f"{class_dir.name}/{sample['output_image'].name}",
+        "original_caption": sample["original_caption"],
+        "edit_instruction": sample["edit_instruction"],
+        "resulting_caption": sample["resulting_caption"],
+        "class_name": class_dir.name,
+    }
 
 def save_split_datasets_to_folders(dataset, splits, output_dir):
     """
@@ -135,33 +165,27 @@ def save_split_datasets_to_folders(dataset, splits, output_dir):
     """
     output_dir = Path(output_dir)
 
-    for split_name, class_names in splits.items():
+    for split_name, class_names in tqdm(splits.items(), desc="Processing Splits"):
         split_dir = output_dir / split_name
         split_dir.mkdir(parents=True, exist_ok=True)
 
         metadata = []
+        futures = []
 
-        for class_name in class_names:
-            class_samples = dataset.get_samples_for_class(class_name)
-            class_dir = split_dir / class_name
-            class_dir.mkdir(parents=True, exist_ok=True)
+        # Use ThreadPoolExecutor for parallel file copying
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            for class_name in tqdm(class_names, desc=f"Processing {split_name} Classes", leave=False):
+                class_samples = dataset.get_samples_for_class(class_name)
+                class_dir = split_dir / class_name
+                class_dir.mkdir(parents=True, exist_ok=True)
 
-            for sample in class_samples:
-                # Copy the input and output images
-                input_image_path = class_dir / sample["input_image"].name
-                output_image_path = class_dir / sample["output_image"].name
-                shutil.copy(sample["input_image"], input_image_path)
-                shutil.copy(sample["output_image"], output_image_path)
+                for sample in class_samples:
+                    # Submit the file copying task
+                    futures.append(executor.submit(copy_sample, sample, class_dir))
 
-                # Append metadata with relative paths
-                metadata.append({
-                    "input_image": f"{class_name}/{sample['input_image'].name}",
-                    "output_image": f"{class_name}/{sample['output_image'].name}",
-                    "original_caption": sample["original_caption"],
-                    "edit_instruction": sample["edit_instruction"],
-                    "resulting_caption": sample["resulting_caption"],
-                    "class_name": class_name,
-                })
+            # Collect results as they complete
+            for future in tqdm(as_completed(futures), desc="Saving Metadata", total=len(futures), leave=False):
+                metadata.append(future.result())
 
         # Save metadata to JSON
         with open(split_dir / f"{split_name}_metadata.json", "w") as f:
@@ -169,7 +193,9 @@ def save_split_datasets_to_folders(dataset, splits, output_dir):
 
 
 if __name__ == "__main__":
-    dataset_dir = "/home/felix.boelter/recreategoods/dataset_generation/data/dataset-full-dino"
-    output_dir = "/home/felix.boelter/recreategoods/dataset_generation/data/split-data"
+    parser = ArgumentParser()
+    parser.add_argument("--dataset_dir", required=True, help="Path to the dataset directory.")
+    parser.add_argument("--output_dir", required=True, help="Path to the output directory for split datasets.")
+    args = parser.parse_args()
 
-    prepare_split_datasets_by_folder(dataset_dir, output_dir)
+    prepare_split_datasets_by_folder(args.dataset_dir, args.output_dir)
