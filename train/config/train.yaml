@@ -1,16 +1,13 @@
 data:
-  batch_size: 8
-  num_workers: 16
+  batch_size: 4
+  val_batch_size: 4
+  num_workers: 8
   data_dir: "/home/felix.boelter/recreategoods/dataset_generation/data/split-data"
-  min_resize_res: 256
-  max_resize_res: 256
-  valid_test_res: 512
-  flip_prob: 0.5
-
+  resize_res: [1024, 1024]
 model:
   name: "shuttleai/shuttle-3.1-aesthetic"
   dtype: "bfloat16"
-  learning_rate: 1e-6
+  learning_rate: 6e-5
   weight_decay: 1e-4
   max_epochs: 20
   scheduler:
@@ -20,4 +17,7 @@ model:
 
 training:
   gpus: 1
+  num_nodes: 1
+  val_check_interval: 100
+  accumulate_grad_batches: 2
   precision: "bf16-mixed"

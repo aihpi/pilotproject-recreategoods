@@ -1,6 +1,6 @@
 from lightning import Trainer
 from dataloader.data_module import FLUXDataModule
-from pipelines.train_pipeline import InstructPix2PixModel
+from pipelines.train_pipeline_optim import InstructPix2PixModel
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
@@ -11,6 +11,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
 from lightning.pytorch.strategies import DeepSpeedStrategy
+
 def load_config(config_path: str):
     """
     Load the YAML configuration file and return a dictionary.
@@ -32,17 +33,16 @@ def main():
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     torch.cuda.set_device(local_rank)
-    torch.set_float32_matmul_precision('medium')
 
+    torch.cuda.empty_cache()
     data_config = config["data"]
     data_module = FLUXDataModule(
         batch_size=data_config["batch_size"],
+        val_batch_size=data_config["val_batch_size"],
         num_workers=data_config["num_workers"],
         data_dir=data_config["data_dir"],
-        min_resize_res=data_config["min_resize_res"],
-        max_resize_res=data_config["max_resize_res"],
-        valid_test_res=data_config["valid_test_res"],
-        flip_prob=data_config["flip_prob"],
+        model_name=config["model"]["name"],
+        image_size=data_config["resize_res"]
     )
 
     # Initialize your FLUX model 
@@ -62,7 +62,7 @@ def main():
         every_n_epochs=1,              
         monitor="val_lpips",          
         mode="min",
-        save_last=True,              # optionally always save a "last.ckpt" on every epoch
+        save_last=False,              
     )
 
     early_stopping_callback = EarlyStopping(
@@ -76,17 +76,15 @@ def main():
         max_epochs=config["model"]["max_epochs"],
         devices="auto",
         accelerator="gpu",
-        strategy=DeepSpeedStrategy(
-            stage=3,
-            offload_optimizer=True,
-            offload_parameters=True,
-        ),
+        num_nodes=training_config["num_nodes"],
+        strategy=DeepSpeedStrategy(stage=2),
         precision=training_config["precision"],
         logger=wandb_logger,
         gradient_clip_val=1.0,
         gradient_clip_algorithm="norm",
-        val_check_interval=64,
-        log_every_n_steps=2, 
+        val_check_interval=training_config["val_check_interval"],
+        accumulate_grad_batches=training_config["accumulate_grad_batches"],
+        log_every_n_steps=1, 
         callbacks=[checkpoint_callback, early_stopping_callback],
     )
 

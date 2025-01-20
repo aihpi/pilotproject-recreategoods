@@ -379,7 +379,6 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
             for i, t in enumerate(timesteps):
                 if self.interrupt:
                     continue
-
                 # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
                 timestep = t.expand(latents.shape[0]).to(latents.dtype)
                 concat_latents = torch.cat([latents, image_latents], dim=2)

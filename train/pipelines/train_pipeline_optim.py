@@ -8,23 +8,23 @@ from diffusers import FluxPipeline
 from pathlib import Path
 from torch import nn
 import torch.nn.functional as F
-from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 from deepspeed.ops.adam import FusedAdam
-
+import deepspeed
 from diffusers import FluxTransformer2DModel, AutoencoderKL, FlowMatchEulerDiscreteScheduler
 import numpy as np
 from diffusers.training_utils import compute_density_for_timestep_sampling, compute_loss_weighting_for_sd3
-from pipelines.tokenize import tokenize_prompt, encode_prompt
+# from pipelines.tokenize import tokenize_prompt, encode_prompt
 from diffusers.utils.torch_utils import randn_tensor
 from deepspeed.ops.adam import DeepSpeedCPUAdam
 from pipelines.inference_pipeline import FluxPix2PixPipeline
 import copy
 import lpips
 import torch.distributed as dist
-from peft import LoraConfig, set_peft_model_state_dict
-from peft.utils import get_peft_model_state_dict
+# from peft import LoraConfig, set_peft_model_state_dict
+# from peft.utils import get_peft_model_state_dict
+from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
-@staticmethod
+
 def _prepare_latent_image_ids(batch_size, height, width, device, dtype):
     latent_image_ids = torch.zeros(height, width, 3)
     latent_image_ids[..., 1] = latent_image_ids[..., 1] + torch.arange(height)[:, None]
@@ -38,7 +38,6 @@ def _prepare_latent_image_ids(batch_size, height, width, device, dtype):
 
     return latent_image_ids.to(device=device, dtype=dtype)
 
-@staticmethod
 def _pack_latents(latents, batch_size, num_channels_latents, height, width):
     latents = latents.view(batch_size, num_channels_latents, height // 2, 2, width // 2, 2)
     latents = latents.permute(0, 2, 4, 1, 3, 5)
@@ -67,43 +66,11 @@ class InstructPix2PixModel(pl.LightningModule):
         super().__init__()
         self.args = args
         self.transformer = None
-        self.vae = None
         self.noise_scheduler = None
-        self.text_encoder = None
         self.weight_dtype = torch.bfloat16
-        self.lpips_fn = lpips.LPIPS(net='alex')
-        self.register_buffer("lpips_buffer", torch.zeros(1))
     
-    
-    def setup(self, stage=None):
-        models = {}
-        model_components = ["transformer", "vae", "scheduler", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
-        for component in model_components:
-            model_class = {
-                "scheduler": FlowMatchEulerDiscreteScheduler,
-                "vae": AutoencoderKL,
-                "text_encoder": CLIPTextModel,
-                "tokenizer": CLIPTokenizer,
-                "text_encoder_2": T5EncoderModel,
-                "tokenizer_2": T5TokenizerFast,
-                "transformer": FluxTransformer2DModel,
-            }[component]
-
-            # Load each component using the corresponding subfolder
-            models[component] = model_class.from_pretrained(
-                self.args['name'], subfolder=component
-            )
-        self.transformer = models["transformer"].to(self.device)
-        self.vae = models["vae"].to("cpu")
-        self.noise_scheduler = models["scheduler"]
-        self.text_encoder = models["text_encoder"]
-        self.tokenizer = models["tokenizer"]
-        self.text_encoder_2 = models["text_encoder_2"]
-        self.tokenizer_2 = models["tokenizer_2"]
-
-        # Update the x_embedder layer in the transformer
-        original_x_embedder = self.transformer.x_embedder
-
+    def _exchange_layer(self, model):
+        original_x_embedder = model.x_embedder
         new_x_embedder = nn.Linear(
             in_features=128,  # Updated input size
             out_features=original_x_embedder.out_features,  # Dynamically use the original out_features
@@ -114,49 +81,46 @@ class InstructPix2PixModel(pl.LightningModule):
         new_x_embedder.weight.data[:, original_x_embedder.in_features:] = 0
         if original_x_embedder.bias is not None:
             new_x_embedder.bias.data = original_x_embedder.bias.data.clone()
-        self.transformer.x_embedder = new_x_embedder
-        # Freeze non-trainable components
-        self.transformer.requires_grad_(False)
+        return new_x_embedder
+    
+    def setup(self, stage=None):
+        models = {}
+        model_components = ["transformer", "scheduler", "vae", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
+        for component in model_components:
+            model_class = {
+                "scheduler": FlowMatchEulerDiscreteScheduler,
+                "transformer": FluxTransformer2DModel,
+                "vae": AutoencoderKL,
+                "text_encoder": CLIPTextModel,
+                "tokenizer": CLIPTokenizer,
+                "text_encoder_2": T5EncoderModel,
+                "tokenizer_2": T5TokenizerFast,
+            }[component]
+            # Load each component using the corresponding subfolder
+            models[component] = model_class.from_pretrained(
+                self.args['name'], subfolder=component
+            )
+        transformer = models["transformer"]
+        self.noise_scheduler = models["scheduler"]
+        transformer.x_embedder = self._exchange_layer(transformer)
+        self.transformer = transformer.train()
+        self.transformer.gradient_checkpointing = True
+
+        self.vae = models["vae"].to("cpu")
+        self.text_encoder = models["text_encoder"].to("cpu")
+        self.text_encoder_2 = models["text_encoder_2"].to("cpu")
+        self.tokenizer = models["tokenizer"]
+        self.tokenizer_2 = models["tokenizer_2"]
+        self.transformer.requires_grad_(True)
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
         self.text_encoder_2.requires_grad_(False)
-        self.transformer.x_embedder.requires_grad_(True)
-        target_modules = [
-            "attn.to_k",
-            "attn.to_q",
-            "attn.to_v",
-            "attn.to_out.0",
-            "attn.add_k_proj",
-            "attn.add_q_proj",
-            "attn.add_v_proj",
-            "attn.to_add_out",
-            "ff.net.0.proj",
-            "ff.net.2",
-            "ff_context.net.0.proj",
-            "ff_context.net.2",
-        ]
-        lora_rank = 4
-        transformer_lora_config = LoraConfig(
-            r=lora_rank,
-            lora_alpha=lora_rank,
-            init_lora_weights="gaussian",
-            target_modules=target_modules,
-        )
-        self.transformer.add_adapter(transformer_lora_config)
-        self.transformer_lora_parameters = list(filter(lambda p: p.requires_grad, self.transformer.parameters()))
          # Initialize the FluxImg2ImgPipeline
         with torch.no_grad():
-            scheduler_copy = copy.deepcopy(self.noise_scheduler)
-            self.pipeline = FluxPix2PixPipeline(
-                transformer=self.transformer,
-                vae=self.vae,
-                scheduler=scheduler_copy,
-                text_encoder=self.text_encoder,
-                tokenizer=self.tokenizer,
-                text_encoder_2=self.text_encoder_2,
-                tokenizer_2=self.tokenizer_2,
-            )
-
+            self.lpips_fn = lpips.LPIPS(net='alex')
+            self.lpips_fn.net.requires_grad_(False)
+        
+       
     def get_sigmas(self,timesteps, n_dim=4, dtype=torch.float32):
         sigmas = self.noise_scheduler.sigmas.to(device=self.device, dtype=dtype)
         schedule_timesteps = self.noise_scheduler.timesteps.to(self.device)
@@ -170,65 +134,45 @@ class InstructPix2PixModel(pl.LightningModule):
     
 
     def forward(self, batch):
-        in_pixel_values = batch["input_image"].to(dtype=self.vae.dtype)
-        out_pixel_values = batch["output_image"].to(dtype=self.vae.dtype)
-        prompts = batch["edit_instruction"]
-        tokens_one = tokenize_prompt(self.tokenizer, prompts, max_sequence_length=77)
-        tokens_two = tokenize_prompt(
-            self.tokenizer_2, prompts, max_sequence_length=256
-        )
-        prompt_embeds, pooled_prompt_embeds, text_ids = encode_prompt(
-            text_encoders=[self.text_encoder, self.text_encoder_2],
-            tokenizers=[None, None],
-            text_input_ids_list=[tokens_one, tokens_two],
-            max_sequence_length=256,
-            prompt=prompts,
-        )
-        # Convert images to latent space
-        model_input = self.vae.encode(out_pixel_values).latent_dist.sample()
-        model_input = (model_input - self.vae.config.shift_factor) * self.vae.config.scaling_factor
-        model_input = model_input.to(dtype=self.weight_dtype)
+        # Extract batch data
+        model_input = batch["model_input"]
+        cond_input = batch["cond_input"]
+        prompt_embeds = batch["prompt_embeds"]
+        pooled_prompt_embeds = batch["pooled_prompt_embeds"]
+        text_ids = batch["text_ids"][0]
+        vae_scale_factor = batch["vae_scale_factor"][0].item()
 
-        
-        self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
-        bsz = out_pixel_values.shape[0]
-           # Sample a random timestep for each image
-        # for weighting schemes where we sample timesteps non-uniformly
+        noise = torch.randn_like(model_input)
+        bsz = model_input.shape[0]
         u = compute_density_for_timestep_sampling(
             weighting_scheme="logit_normal",
             batch_size=bsz,
-            logit_mean=0.0,
+            logit_mean=0.0, 
             logit_std=1.0,
             mode_scale=1.29,
         )
         indices = (u * self.noise_scheduler.config.num_train_timesteps).long()
         timesteps = self.noise_scheduler.timesteps[indices].to(device=model_input.device)
-     
-        # Add noise according to flow matching.
-        # zt = (1 - texp) * x + texp * z1
-        noise = torch.randn_like(model_input)
+        
         sigmas = self.get_sigmas(timesteps, n_dim=model_input.ndim, dtype=model_input.dtype)
         noisy_model_input = (1.0 - sigmas) * model_input + sigmas * noise
-       
-        cond_model_input = self.vae.encode(in_pixel_values).latent_dist.sample()
-        cond_model_input = (cond_model_input - self.vae.config.shift_factor) * self.vae.config.scaling_factor
-        cond_model_input = cond_model_input.to(dtype=self.weight_dtype)
-        packed_noisy_model_input = torch.cat([noisy_model_input, cond_model_input], dim=1)
+        noisy_cond_model_input = torch.cat([noisy_model_input, cond_input], dim=1)
 
         latent_image_ids = _prepare_latent_image_ids(
-            packed_noisy_model_input.shape[0],
-            packed_noisy_model_input.shape[2] // 2,
-            packed_noisy_model_input.shape[3] // 2,
+            noisy_cond_model_input.shape[0],
+            noisy_cond_model_input.shape[2] // 2,
+            noisy_cond_model_input.shape[3] // 2,
             self.device,
             self.weight_dtype,
         )
-        packed_noisy_model_input = _pack_latents(
-            packed_noisy_model_input,
-            batch_size=packed_noisy_model_input.shape[0],
-            num_channels_latents=packed_noisy_model_input.shape[1],
-            height=packed_noisy_model_input.shape[2],
-            width=packed_noisy_model_input.shape[3],
+        packed_noisy_cond_model_input = _pack_latents(
+            noisy_cond_model_input,
+            batch_size=noisy_cond_model_input.shape[0],
+            num_channels_latents=noisy_cond_model_input.shape[1],
+            height=noisy_cond_model_input.shape[2],
+            width=noisy_cond_model_input.shape[3],
         )
+
         if self.transformer.config.guidance_embeds:
             guidance = torch.tensor([self.args.guidance_scale], device=self.device)
             guidance = guidance.expand(model_input.shape[0])
@@ -236,7 +180,7 @@ class InstructPix2PixModel(pl.LightningModule):
             guidance = None
 
         model_pred = self.transformer(
-                hidden_states=packed_noisy_model_input,
+                hidden_states=packed_noisy_cond_model_input,
                 # YiYi notes: divide it by 1000 for now because we scale it by 1000 in the transforme rmodel (we should not keep it but I want to keep the inputs same for the model for testing)
                 timestep=timesteps / 1000,
                 guidance=guidance,
@@ -245,12 +189,13 @@ class InstructPix2PixModel(pl.LightningModule):
                 txt_ids=text_ids,
                 img_ids=latent_image_ids,
                 return_dict=False,)[0]
+        
          # upscaling height & width as discussed in https://github.com/huggingface/diffusers/pull/9257#discussion_r1731108042
         model_pred = _unpack_latents(
             model_pred,
-            height=model_input.shape[2] * self.vae_scale_factor,
-            width=model_input.shape[3] * self.vae_scale_factor,
-            vae_scale_factor=self.vae_scale_factor,
+            height=int(model_input.shape[2] * vae_scale_factor),
+            width=int(model_input.shape[3] * vae_scale_factor),
+            vae_scale_factor=vae_scale_factor,
         )
         # these weighting schemes use a uniform timestep sampling
         # and instead post-weight the loss
@@ -283,9 +228,40 @@ class InstructPix2PixModel(pl.LightningModule):
         num_inference_steps = int(gathered_steps[0].item())
         return num_inference_steps
     
+    
+    def on_validation_start(self):
+        self.transformer.eval()
+        with torch.no_grad():
+            self.vae.to(self.device)
+            self.text_encoder.to(self.device)
+            self.text_encoder_2.to(self.device)
+            torch.cuda.empty_cache()
+            scheduler_copy = copy.deepcopy(self.noise_scheduler)
+            self.pipeline = FluxPix2PixPipeline(
+                transformer=self.transformer,
+                vae=self.vae,
+                scheduler=scheduler_copy,
+                text_encoder=self.text_encoder,
+                tokenizer=self.tokenizer,
+                text_encoder_2=self.text_encoder_2,
+                tokenizer_2=self.tokenizer_2,
+            )
+            self.pipeline.set_progress_bar_config(disable=True)
+            
+        
+    
+    def on_validation_end(self):
+        self.pipeline = None
+        import gc
+        gc.collect()
+        self.vae.to("cpu")
+        self.text_encoder.to("cpu")
+        self.text_encoder_2.to("cpu")
+        torch.cuda.empty_cache()
+        self.transformer.train()
+
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
-
             in_pixel_values = batch["input_image"].to(dtype=self.vae.dtype)
             prompts = batch["edit_instruction"]
             generated_output = self.pipeline(
@@ -320,14 +296,12 @@ class InstructPix2PixModel(pl.LightningModule):
 
         # Cleanup
         del generated_output, in_pixel_values, prompts, gen_images, gt_images
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-
         return {}
+    
 
     
     def configure_optimizers(self):
-        optimizer = FusedAdam(self.transformer_lora_parameters, lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+        optimizer = FusedAdam(self.transformer.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.max_epochs)
         scheduler_dict = {
             "scheduler": scheduler,
