@@ -5,14 +5,12 @@ import time
 import streamlit as st
 from PIL import ExifTags, Image, ImageFile
 from streamlit_scroll_to_top import scroll_to_here
-import os
 import json
 import uuid
 from datetime import datetime
 import zipfile
-import io
-import re
 from io import BytesIO
+import re
 from glob import iglob
 import torch
 from einops import rearrange
@@ -31,11 +29,28 @@ from flux.util import (
     load_t5,
 )
 
+# Constants
 NSFW_THRESHOLD = 0.85
 BASE_DIR = os.path.dirname(__file__)
 HISTORY_DIR = os.path.join(BASE_DIR, "history")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
     
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+def initialize_session_state():
+    """Initialize all session state variables."""
+    if 'initialized' not in st.session_state:
+        st.session_state.initialized = True
+        st.session_state.scroll_to_top = False
+        st.session_state.uploaded_image = None
+        st.session_state.last_uploaded_file = None
+        st.session_state.prompt = ""
+        st.session_state.selected_model = list(configs.keys())[0]  # Set default model
+        st.session_state.samples = None
+        st.session_state.generated_image = None
+        st.session_state.show_delete_confirmation = False
+        st.session_state.show_download_confirmation = False
+        st.session_state.seed = None
 
 def clear_gpu_memory():
     """Clear GPU memory and cache."""
@@ -52,72 +67,65 @@ def get_models(name: str, device: torch.device, offload: bool, is_schnell: bool)
     nsfw_classifier = pipeline("image-classification", model="Falconsai/nsfw_image_detection", device=device)
     return model, ae, t5, clip, nsfw_classifier
 
-@torch.inference_mode()
-def main(
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    offload: bool = False,
-    output_dir: str = "output",
-):
-    print(f"Using device: {device}")
-    if not os.path.exists(HISTORY_DIR):
-        os.makedirs(HISTORY_DIR)
-    HISTORY_FILE = os.path.join(HISTORY_DIR, "generation_history.json")
+def ensure_directories():
+    """Ensure all required directories exist."""
+    os.makedirs(HISTORY_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Clear GPU memory when starting new session
-    clear_gpu_memory()
-    
-    st.set_page_config(
-        page_title="recreategoods",
-        page_icon="🪡",
-        layout="wide"
-    )
-
-    # Register session state cleanup
-    if 'initialized' not in st.session_state:
-        st.session_state.initialized = True
-        def cleanup():
-            clear_gpu_memory()
-        st.session_state.cleanup = cleanup
-    
-    torch_device = torch.device(device)
-    
-    if 'scroll_to_top' not in st.session_state:
-        st.session_state.scroll_to_top = False
-
-    if st.session_state.scroll_to_top:
-        scroll_to_here(0, key='top')
-        st.session_state.scroll_to_top = False
-
-    def load_history():
-        if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, 'r') as f:
+def load_history():
+    """Load history from file with error handling."""
+    history_file = os.path.join(HISTORY_DIR, "generation_history.json")
+    try:
+        if os.path.exists(history_file):
+            with open(history_file, 'r') as f:
                 return json.load(f)
-        return []
+    except Exception as e:
+        st.error(f"Error loading history: {str(e)}")
+    return []
 
-    def save_history(history):
-        with open(HISTORY_FILE, 'w') as f:
+def save_history(history):
+    """Save history to file with error handling."""
+    history_file = os.path.join(HISTORY_DIR, "generation_history.json")
+    try:
+        with open(history_file, 'w') as f:
             json.dump(history, f, indent=2)
+    except Exception as e:
+        st.error(f"Error saving history: {str(e)}")
 
-    def save_generation(input_image, prompt, output_image):
-        # Generate unique ID for this generation
+def create_download_zip():
+    """Create a zip file containing all history entries and images."""
+    zip_buffer = BytesIO()
+    history_file = os.path.join(HISTORY_DIR, "generation_history.json")
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # Add history.json
+        if os.path.exists(history_file):
+            zip_file.write(history_file, "history.json")
+        
+        # Add all image files
+        for filename in os.listdir(HISTORY_DIR):
+            if filename != "generation_history.json":
+                file_path = os.path.join(HISTORY_DIR, filename)
+                if os.path.isfile(file_path):
+                    zip_file.write(file_path, filename)
+    
+    zip_buffer.seek(0)
+    return zip_buffer
+
+def save_generation(input_image, prompt, output_image, selected_model):
+    """Save a new generation with error handling."""
+    try:
         gen_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
         
-        # Get original filename without extension
         original_filename = st.session_state.last_uploaded_file
         base_filename = os.path.splitext(original_filename)[0]
+        input_ext = os.path.splitext(original_filename)[1].lstrip('.') or "jpg"
         
-        # Get input image extension
-        input_ext = os.path.splitext(original_filename)[1].lstrip('.')
-        if not input_ext:
-            input_ext = "jpg"  # Default to jpg
-        
-        # Save input image
         input_filename = f"{base_filename}_{gen_id}_input.{input_ext}"
         input_path = os.path.join(HISTORY_DIR, input_filename)
         input_image.save(input_path)
         
-        # Save output image
         output_filename = f"{base_filename}_{gen_id}_output.{input_ext}"
         output_path = os.path.join(HISTORY_DIR, output_filename)
         output_image.save(output_path)
@@ -137,6 +145,36 @@ def main(
         save_history(history)
         
         return entry
+    except Exception as e:
+        st.error(f"Error saving generation: {str(e)}")
+        return None
+
+@torch.inference_mode()
+def main(
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    offload: bool = False,
+    output_dir: str = OUTPUT_DIR,
+):
+    print(f"Using device: {device}")
+    ensure_directories()
+    initialize_session_state()
+    clear_gpu_memory()
+    
+    st.set_page_config(
+        page_title="recreategoods",
+        page_icon="🪡",
+        layout="wide"
+    )
+
+    # Register session state cleanup
+    if 'cleanup' not in st.session_state:
+        st.session_state.cleanup = clear_gpu_memory
+    
+    torch_device = torch.device(device)
+    
+    if st.session_state.scroll_to_top:
+        scroll_to_here(0, key='top')
+        st.session_state.scroll_to_top = False
 
     st.markdown("""
         <style>
@@ -260,26 +298,6 @@ def main(
         st.session_state.show_delete_confirmation = False
         st.rerun()
 
-    def create_download_zip():
-        # Create a BytesIO object to store the zip file
-        zip_buffer = io.BytesIO()
-        
-        # Create a new zip file
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Add history.json
-            zip_file.write(HISTORY_FILE, "history.json")
-            
-            # Add all image files
-            for filename in os.listdir(HISTORY_DIR):
-                if filename != "generation_history.json":
-                    file_path = os.path.join(HISTORY_DIR, filename)
-                    if os.path.isfile(file_path):
-                        zip_file.write(file_path, filename)
-        
-        # Reset buffer position
-        zip_buffer.seek(0)
-        return zip_buffer
-
     col1, col2, col3 = st.columns([1, 1.2, 1])
 
     with col1:
@@ -329,17 +347,13 @@ def main(
     # Column 2: Edit Instructions and Model Selection
     with col2:
         st.markdown('<p class="step-header">Step 2: Enter Your Edit Instructions</p>', unsafe_allow_html=True)
-        if "prompt" not in st.session_state:
-            st.session_state.prompt = ""
         prompt = st.text_area("Describe how you want to modify the garment", 
-                            value=st.session_state.prompt,  # Use the session state value
+                            value=st.session_state.prompt,
                             height=100)
         st.session_state.prompt = prompt
         
         st.markdown('<p class="step-header">Step 3: Choose Your Model</p>', unsafe_allow_html=True)
         model_options = list(configs.keys())
-        if "selected_model" not in st.session_state:
-            st.session_state.selected_model = model_options[0]
         selected_model = st.selectbox("Select the AI model to use", 
                                     model_options,
                                     index=model_options.index(st.session_state.selected_model))
@@ -568,7 +582,8 @@ def main(
                     save_generation(
                         input_image=st.session_state.uploaded_image,
                         prompt=prompt,
-                        output_image=samples["img"]
+                        output_image=samples["img"],
+                        selected_model=selected_model
                     )
 
     with col3:
