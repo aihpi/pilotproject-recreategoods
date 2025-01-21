@@ -742,13 +742,33 @@ def main(
                 
                 if st.button(full_header, key=f"history_{entry['id']}", use_container_width=True, help=full_header):
                     # Restore the history entry
-                    st.session_state.uploaded_image = Image.open(os.path.join(HISTORY_DIR, entry["input_image"]))
-                    st.session_state.last_uploaded_file = entry["original_filename"]
-                    st.session_state["prompt"] = entry["prompt"]
-                    st.session_state["selected_model"] = entry.get("model", "Stable Diffusion")
-                    st.session_state.generated_image = Image.open(os.path.join(HISTORY_DIR, entry["output_image"]))
-                    st.session_state.scroll_to_top = True
-                    st.rerun()
+                    input_path = os.path.join(HISTORY_DIR, entry["input_image"])
+                    output_path = os.path.join(HISTORY_DIR, entry["output_image"])
+                    
+                    if os.path.exists(input_path) and os.path.exists(output_path):
+                        # Load input image
+                        st.session_state.uploaded_image = Image.open(input_path)
+                        st.session_state.last_uploaded_file = entry["original_filename"]
+                        st.session_state.prompt = entry["prompt"]
+                        st.session_state.selected_model = entry.get("model", "Stable Diffusion")
+                        
+                        # Create samples data structure for output image
+                        output_img = Image.open(output_path)
+                        buffer = BytesIO()
+                        output_img.save(buffer, format="JPEG", quality=95)
+                        img_bytes = buffer.getvalue()
+                        
+                        st.session_state.samples = {
+                            "prompt": entry["prompt"],
+                            "img": output_img,
+                            "seed": None,  # We don't store seed in history
+                            "bytes": img_bytes,
+                        }
+                        
+                        st.session_state.scroll_to_top = True
+                        st.rerun()
+                    else:
+                        st.error("Could not restore history entry: Images not found")
                 
                 img1_col, prompt_col, img2_col = st.columns(3)
                 
