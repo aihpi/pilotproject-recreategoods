@@ -17,6 +17,7 @@ from diffusers.training_utils import compute_density_for_timestep_sampling, comp
 from diffusers.utils.torch_utils import randn_tensor
 from deepspeed.ops.adam import DeepSpeedCPUAdam
 from pipelines.inference_pipeline import FluxPix2PixPipeline
+from diffusers import FluxImg2ImgPipeline
 import copy
 import lpips
 import torch.distributed as dist
@@ -102,7 +103,7 @@ class InstructPix2PixModel(pl.LightningModule):
             )
         transformer = models["transformer"]
         self.noise_scheduler = models["scheduler"]
-        transformer.x_embedder = self._exchange_layer(transformer)
+        # transformer.x_embedder = self._exchange_layer(transformer)
         self.transformer = transformer.train()
         self.transformer.gradient_checkpointing = True
 
@@ -154,23 +155,23 @@ class InstructPix2PixModel(pl.LightningModule):
         indices = (u * self.noise_scheduler.config.num_train_timesteps).long()
         timesteps = self.noise_scheduler.timesteps[indices].to(device=model_input.device)
         
-        sigmas = self.get_sigmas(timesteps, n_dim=model_input.ndim, dtype=model_input.dtype)
-        noisy_model_input = (1.0 - sigmas) * model_input + sigmas * noise
-        noisy_cond_model_input = torch.cat([noisy_model_input, cond_input], dim=1)
+        sigmas = self.get_sigmas(timesteps, n_dim=cond_input.ndim, dtype=cond_input.dtype)
+        noisy_model_input = (1.0 - sigmas) * cond_input + sigmas * noise
+        # noisy_cond_model_input = torch.cat([noisy_model_input, cond_input], dim=1)
 
         latent_image_ids = _prepare_latent_image_ids(
-            noisy_cond_model_input.shape[0],
-            noisy_cond_model_input.shape[2] // 2,
-            noisy_cond_model_input.shape[3] // 2,
+            noisy_model_input.shape[0],
+            noisy_model_input.shape[2] // 2,
+            noisy_model_input.shape[3] // 2,
             self.device,
             self.weight_dtype,
         )
         packed_noisy_cond_model_input = _pack_latents(
-            noisy_cond_model_input,
-            batch_size=noisy_cond_model_input.shape[0],
-            num_channels_latents=noisy_cond_model_input.shape[1],
-            height=noisy_cond_model_input.shape[2],
-            width=noisy_cond_model_input.shape[3],
+            noisy_model_input,
+            batch_size=noisy_model_input.shape[0],
+            num_channels_latents=noisy_model_input.shape[1],
+            height=noisy_model_input.shape[2],
+            width=noisy_model_input.shape[3],
         )
 
         if self.transformer.config.guidance_embeds:
@@ -237,7 +238,7 @@ class InstructPix2PixModel(pl.LightningModule):
             self.text_encoder_2.to(self.device)
             torch.cuda.empty_cache()
             scheduler_copy = copy.deepcopy(self.noise_scheduler)
-            self.pipeline = FluxPix2PixPipeline(
+            self.pipeline = FluxImg2ImgPipeline(
                 transformer=self.transformer,
                 vae=self.vae,
                 scheduler=scheduler_copy,
@@ -264,18 +265,19 @@ class InstructPix2PixModel(pl.LightningModule):
         with torch.no_grad():
             in_pixel_values = batch["input_image"].to(dtype=self.vae.dtype)
             prompts = batch["edit_instruction"]
+            strength = 0.6
             generated_output = self.pipeline(
                 prompt=prompts,
                 image=in_pixel_values,
                 height=in_pixel_values.shape[2],
                 width=in_pixel_values.shape[3],
-                strength=1,
+                strength=strength,
                 num_inference_steps=6,
                 guidance_scale=4.5,
                 num_images_per_prompt=1,
                 generator=None,
                 output_type="pt",
-            )
+            ).images
 
             gt_images = batch["output_image"].to(dtype=torch.bfloat16, device=generated_output.device)
             gen_images = generated_output.to(dtype=torch.bfloat16, device=generated_output.device)

@@ -52,7 +52,7 @@ def main():
     # Initialize WandB Logger
     wandb_logger = WandbLogger(
         project="FLUX-Training",
-        name="flux-model-run",
+        name="flux-model-run-timesteps",
         log_model=True, 
     )
     checkpoint_callback = ModelCheckpoint(

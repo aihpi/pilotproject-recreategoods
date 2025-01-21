@@ -59,11 +59,14 @@ class EditDataset(Dataset):
         for item in tqdm(metadata_per_rank, desc=f"Rank {current_rank} Precomputing latents and embeddings", disable=not current_rank == 0):
             input_image_path = self.data_dir / item["input_image"]
             output_image_path = self.data_dir / item["output_image"]
-            latent_data_path = input_image_path.with_suffix(".latent_data.pt")
+            latent_data_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
 
             if latent_data_path.exists():
                 continue
-
+            else:
+                # Remove any existing latent data
+                for path in input_image_path.parent.glob(f"{input_image_path.stem}.latent_data*.pt"):
+                    path.unlink()
             transform = transforms.Compose([
                 transforms.Resize((self.width_resize, self.height_resize)),
                 transforms.ToTensor(),
@@ -103,7 +106,7 @@ class EditDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.metadata[idx]
-        latent_data_path = (self.data_dir / item["input_image"]).with_suffix(".latent_data.pt")
+        latent_data_path = (self.data_dir / item["input_image"]).with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
         data = torch.load(latent_data_path, map_location="cpu", weights_only=True)
 
         return {
