@@ -113,34 +113,34 @@ class InstructPix2PixModel(pl.LightningModule):
         self.text_encoder_2 = models["text_encoder_2"].to("cpu")
         self.tokenizer = models["tokenizer"]
         self.tokenizer_2 = models["tokenizer_2"]
-        self.transformer.requires_grad_(False)
+        self.transformer.requires_grad_(True)
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
         self.text_encoder_2.requires_grad_(False)
-        target_modules = [
-            "attn.to_k",
-            "attn.to_q",
-            "attn.to_v",
-            "attn.to_out.0",
-            "attn.add_k_proj",
-            "attn.add_q_proj",
-            "attn.add_v_proj",
-            "attn.to_add_out",
-            "ff.net.0.proj",
-            "ff.net.2",
-            "ff_context.net.0.proj",
-            "ff_context.net.2",
-        ]
-        lora_rank = 8
-        transformer_lora_config = LoraConfig(
-            r=lora_rank,
-            lora_alpha=lora_rank,
-            init_lora_weights="gaussian",
-            target_modules=target_modules,
-        )
-        transformer.x_embedder.requires_grad_(True)
-        self.transformer.add_adapter(transformer_lora_config)
-        self.transformer_lora_parameters = list(filter(lambda p: p.requires_grad, self.transformer.parameters()))
+        # target_modules = [
+        #     "attn.to_k",
+        #     "attn.to_q",
+        #     "attn.to_v",
+        #     "attn.to_out.0",
+        #     "attn.add_k_proj",
+        #     "attn.add_q_proj",
+        #     "attn.add_v_proj",
+        #     "attn.to_add_out",
+        #     "ff.net.0.proj",
+        #     "ff.net.2",
+        #     "ff_context.net.0.proj",
+        #     "ff_context.net.2",
+        # ]
+        # lora_rank = 32
+        # transformer_lora_config = LoraConfig(
+        #     r=lora_rank,
+        #     lora_alpha=lora_rank,
+        #     init_lora_weights="gaussian",
+        #     target_modules=target_modules,
+        # )
+        # transformer.x_embedder.requires_grad_(True)
+        # self.transformer.add_adapter(transformer_lora_config)
+        # self.transformer_lora_parameters = list(filter(lambda p: p.requires_grad, self.transformer.parameters()))
          # Initialize the FluxImg2ImgPipeline
         with torch.no_grad():
             self.lpips_fn = lpips.LPIPS(net='alex')
@@ -226,7 +226,7 @@ class InstructPix2PixModel(pl.LightningModule):
         # these weighting schemes use a uniform timestep sampling
         # and instead post-weight the loss
         weighting = compute_loss_weighting_for_sd3(weighting_scheme=None, sigmas=sigmas)
-        target = model_input - noisy_model_input
+        target = noise
         return model_pred, target, weighting
         
 
@@ -290,7 +290,7 @@ class InstructPix2PixModel(pl.LightningModule):
         with torch.no_grad():
             in_pixel_values = batch["input_image"].to(dtype=self.vae.dtype)
             prompts = batch["edit_instruction"]
-            strength = 0.6
+            strength = 1
             generated_output = self.pipeline(
                 prompt=prompts,
                 image=in_pixel_values,
@@ -328,7 +328,7 @@ class InstructPix2PixModel(pl.LightningModule):
 
     
     def configure_optimizers(self):
-        optimizer = FusedAdam(self.transformer_lora_parameters, lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+        optimizer = FusedAdam(self.transformer.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.max_epochs)
         scheduler_dict = {
             "scheduler": scheduler,

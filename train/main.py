@@ -52,7 +52,7 @@ def main():
     # Initialize WandB Logger
     wandb_logger = WandbLogger(
         project="FLUX-Training",
-        name="flux-model-run-lora",
+        name=config["training"]["wandb_run_name"],
         log_model=True, 
     )
     checkpoint_callback = ModelCheckpoint(
@@ -82,7 +82,7 @@ def main():
         logger=wandb_logger,
         gradient_clip_val=1.0,
         gradient_clip_algorithm="norm",
-        val_check_interval=training_config["val_check_interval"],
+        check_val_every_n_epoch=training_config["check_val_every_n_epoch"],
         accumulate_grad_batches=training_config["accumulate_grad_batches"],
         log_every_n_steps=1, 
         callbacks=[checkpoint_callback, early_stopping_callback],
