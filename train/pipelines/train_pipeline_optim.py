@@ -104,7 +104,7 @@ class InstructPix2PixModel(pl.LightningModule):
             )
         transformer = models["transformer"]
         self.noise_scheduler = models["scheduler"]
-        # transformer.x_embedder = self._exchange_layer(transformer)
+        transformer.x_embedder = self._exchange_layer(transformer)
         self.transformer = transformer.train()
         self.transformer.gradient_checkpointing = True
 
@@ -131,13 +131,14 @@ class InstructPix2PixModel(pl.LightningModule):
             "ff_context.net.0.proj",
             "ff_context.net.2",
         ]
-        lora_rank = 32
+        lora_rank = 8
         transformer_lora_config = LoraConfig(
             r=lora_rank,
             lora_alpha=lora_rank,
             init_lora_weights="gaussian",
             target_modules=target_modules,
         )
+        transformer.x_embedder.requires_grad_(True)
         self.transformer.add_adapter(transformer_lora_config)
         self.transformer_lora_parameters = list(filter(lambda p: p.requires_grad, self.transformer.parameters()))
          # Initialize the FluxImg2ImgPipeline
@@ -181,21 +182,21 @@ class InstructPix2PixModel(pl.LightningModule):
         
         sigmas = self.get_sigmas(timesteps, n_dim=cond_input.ndim, dtype=cond_input.dtype)
         noisy_model_input = (1.0 - sigmas) * model_input + sigmas * noise
-        # noisy_cond_model_input = torch.cat([noisy_model_input, cond_input], dim=1)
+        noisy_cond_model_input = torch.cat([noisy_model_input, cond_input], dim=1)
 
         latent_image_ids = _prepare_latent_image_ids(
-            noisy_model_input.shape[0],
-            noisy_model_input.shape[2] // 2,
-            noisy_model_input.shape[3] // 2,
+            noisy_cond_model_input.shape[0],
+            noisy_cond_model_input.shape[2] // 2,
+            noisy_cond_model_input.shape[3] // 2,
             self.device,
             self.weight_dtype,
         )
         packed_noisy_cond_model_input = _pack_latents(
-            noisy_model_input,
-            batch_size=noisy_model_input.shape[0],
-            num_channels_latents=noisy_model_input.shape[1],
-            height=noisy_model_input.shape[2],
-            width=noisy_model_input.shape[3],
+            noisy_cond_model_input,
+            batch_size=noisy_cond_model_input.shape[0],
+            num_channels_latents=noisy_cond_model_input.shape[1],
+            height=noisy_cond_model_input.shape[2],
+            width=noisy_cond_model_input.shape[3],
         )
 
         if self.transformer.config.guidance_embeds:
@@ -225,7 +226,7 @@ class InstructPix2PixModel(pl.LightningModule):
         # these weighting schemes use a uniform timestep sampling
         # and instead post-weight the loss
         weighting = compute_loss_weighting_for_sd3(weighting_scheme=None, sigmas=sigmas)
-        target = noise - cond_input
+        target = model_input - noisy_model_input
         return model_pred, target, weighting
         
 
@@ -262,7 +263,7 @@ class InstructPix2PixModel(pl.LightningModule):
             self.text_encoder_2.to(self.device)
             torch.cuda.empty_cache()
             scheduler_copy = copy.deepcopy(self.noise_scheduler)
-            self.pipeline = FluxImg2ImgPipeline(
+            self.pipeline = FluxPix2PixPipeline(
                 transformer=self.transformer,
                 vae=self.vae,
                 scheduler=scheduler_copy,

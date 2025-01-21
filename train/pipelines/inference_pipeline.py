@@ -428,4 +428,4 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
         if not return_dict:
             return (image,)
 
-        return image
+        return FluxPipelineOutput(images=image)
