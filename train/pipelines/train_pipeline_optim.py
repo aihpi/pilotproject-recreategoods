@@ -226,10 +226,18 @@ class InstructPix2PixModel(pl.LightningModule):
         # these weighting schemes use a uniform timestep sampling
         # and instead post-weight the loss
         weighting = compute_loss_weighting_for_sd3(weighting_scheme=None, sigmas=sigmas)
-        target = noise
+        target = noise - model_input
         return model_pred, target, weighting
         
-
+    def compute_l2sp_loss(self):
+        """
+        Compute the L2-SP loss to encourage model weights to stay close to pre-trained weights.
+        """
+        l2sp_loss = 0.0
+        for param, pre_param in zip(self.model.parameters(), self.pretrained_model.parameters()):
+            l2sp_loss += torch.sum((param - pre_param) ** 2)
+        return l2sp_loss * self.args["l2sp_weight"]
+    
     def training_step(self, batch, batch_idx):
         pred_noise, target_noise, weight = self(batch)
         loss = (weight * F.mse_loss(pred_noise, target_noise)).mean()

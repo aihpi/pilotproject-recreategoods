@@ -56,32 +56,56 @@ class EditDataset(Dataset):
     def _precompute_and_save(self):
         current_rank = torch.distributed.get_rank()
         metadata_per_rank = self.metadata[current_rank::torch.distributed.get_world_size()]
+
         for item in tqdm(metadata_per_rank, desc=f"Rank {current_rank} Precomputing latents and embeddings", disable=not current_rank == 0):
             input_image_path = self.data_dir / item["input_image"]
             output_image_path = self.data_dir / item["output_image"]
-            latent_data_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
 
-            if latent_data_path.exists():
+            # Paths for original and augmented data
+            latent_data_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
+            latent_data_flipped_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}_flipped.pt")
+
+            # Skip if both original and flipped latent data exist
+            if latent_data_path.exists() and latent_data_flipped_path.exists():
                 continue
             else:
                 # Remove any existing latent data
                 for path in input_image_path.parent.glob(f"{input_image_path.stem}.latent_data*.pt"):
                     path.unlink()
+
+            # Define transformations
             transform = transforms.Compose([
                 transforms.Resize((self.width_resize, self.height_resize)),
                 transforms.ToTensor(),
                 transforms.Normalize([0.5], [0.5]),
             ])
-            # Load and encode images
+            horizontal_flip = transforms.RandomHorizontalFlip(p=1.0)
+
+            # Load original images
             input_image = Image.open(input_image_path).convert("RGB")
             output_image = Image.open(output_image_path).convert("RGB")
+
+            # Original images tensor
             input_tensor = transform(input_image).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
             output_tensor = transform(output_image).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
-            
+
+            # Horizontally flipped images tensor
+            input_image_flipped = horizontal_flip(input_image)
+            output_image_flipped = horizontal_flip(output_image)
+            input_tensor_flipped = transform(input_image_flipped).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
+            output_tensor_flipped = transform(output_image_flipped).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
+
+            # Encode original images
             cond_input = self.vae.encode(input_tensor).latent_dist.sample()
             model_input = self.vae.encode(output_tensor).latent_dist.sample()
+
+            # Encode flipped images
+            cond_input_flipped = self.vae.encode(input_tensor_flipped).latent_dist.sample()
+            model_input_flipped = self.vae.encode(output_tensor_flipped).latent_dist.sample()
+
+            # VAE scale factor
             vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
-            
+
             # Tokenize prompts
             tokens_one = tokenize_prompt(self.tokenizer, item["edit_instruction"], max_sequence_length=77)
             tokens_two = tokenize_prompt(self.tokenizer_2, item["edit_instruction"], max_sequence_length=256)
@@ -92,8 +116,7 @@ class EditDataset(Dataset):
                 max_sequence_length=256,
                 prompt=item["edit_instruction"],
             )
-            
-            # Save precomputed data
+
             torch.save({
                 "model_input": model_input.squeeze(0).detach().cpu(),
                 "cond_input": cond_input.squeeze(0).detach().cpu(),
@@ -102,12 +125,33 @@ class EditDataset(Dataset):
                 "text_ids": text_ids,
                 "vae_scale_factor": vae_scale_factor,
             }, latent_data_path)
+
+            torch.save({
+                "model_input": model_input_flipped.squeeze(0).detach().cpu(),
+                "cond_input": cond_input_flipped.squeeze(0).detach().cpu(),
+                "prompt_embeds": prompt_embeds.squeeze(0).detach().cpu(),
+                "pooled_prompt_embeds": pooled_prompt_embeds.squeeze(0).detach().cpu(),
+                "text_ids": text_ids,
+                "vae_scale_factor": vae_scale_factor,
+            }, latent_data_flipped_path)
         torch.distributed.barrier()
 
     def __getitem__(self, idx):
         item = self.metadata[idx]
         latent_data_path = (self.data_dir / item["input_image"]).with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
-        data = torch.load(latent_data_path, map_location="cpu", weights_only=True)
+        latent_data_flipped_path = (self.data_dir / item["input_image"]).with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}_flipped.pt")
+
+        # Randomly choose between original and flipped data if both exist
+        if latent_data_path.exists() and latent_data_flipped_path.exists():
+            chosen_path = random.choice([latent_data_path, latent_data_flipped_path])
+        elif latent_data_path.exists():
+            chosen_path = latent_data_path
+        elif latent_data_flipped_path.exists():
+            chosen_path = latent_data_flipped_path
+        else:
+            raise FileNotFoundError(f"Neither original nor flipped latent data found for {item['input_image']}")
+
+        data = torch.load(chosen_path, map_location="cpu", weights_only=True)
 
         return {
             "model_input": data["model_input"],
