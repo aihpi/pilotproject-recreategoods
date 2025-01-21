@@ -78,7 +78,7 @@ class EditDataset(Dataset):
             input_tensor = transform(input_image).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
             output_tensor = transform(output_image).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
             
-            cond_input = self.vae.encode(input_tensor).latent_dist.mode()
+            cond_input = self.vae.encode(input_tensor).latent_dist.sample()
             model_input = self.vae.encode(output_tensor).latent_dist.sample()
             vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
             

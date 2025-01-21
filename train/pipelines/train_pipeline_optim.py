@@ -24,6 +24,7 @@ import torch.distributed as dist
 # from peft import LoraConfig, set_peft_model_state_dict
 # from peft.utils import get_peft_model_state_dict
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
+from peft import LoraConfig
 
 
 def _prepare_latent_image_ids(batch_size, height, width, device, dtype):
@@ -112,10 +113,33 @@ class InstructPix2PixModel(pl.LightningModule):
         self.text_encoder_2 = models["text_encoder_2"].to("cpu")
         self.tokenizer = models["tokenizer"]
         self.tokenizer_2 = models["tokenizer_2"]
-        self.transformer.requires_grad_(True)
+        self.transformer.requires_grad_(False)
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
         self.text_encoder_2.requires_grad_(False)
+        target_modules = [
+            "attn.to_k",
+            "attn.to_q",
+            "attn.to_v",
+            "attn.to_out.0",
+            "attn.add_k_proj",
+            "attn.add_q_proj",
+            "attn.add_v_proj",
+            "attn.to_add_out",
+            "ff.net.0.proj",
+            "ff.net.2",
+            "ff_context.net.0.proj",
+            "ff_context.net.2",
+        ]
+        lora_rank = 32
+        transformer_lora_config = LoraConfig(
+            r=lora_rank,
+            lora_alpha=lora_rank,
+            init_lora_weights="gaussian",
+            target_modules=target_modules,
+        )
+        self.transformer.add_adapter(transformer_lora_config)
+        self.transformer_lora_parameters = list(filter(lambda p: p.requires_grad, self.transformer.parameters()))
          # Initialize the FluxImg2ImgPipeline
         with torch.no_grad():
             self.lpips_fn = lpips.LPIPS(net='alex')
@@ -156,7 +180,7 @@ class InstructPix2PixModel(pl.LightningModule):
         timesteps = self.noise_scheduler.timesteps[indices].to(device=model_input.device)
         
         sigmas = self.get_sigmas(timesteps, n_dim=cond_input.ndim, dtype=cond_input.dtype)
-        noisy_model_input = (1.0 - sigmas) * cond_input + sigmas * noise
+        noisy_model_input = (1.0 - sigmas) * model_input + sigmas * noise
         # noisy_cond_model_input = torch.cat([noisy_model_input, cond_input], dim=1)
 
         latent_image_ids = _prepare_latent_image_ids(
@@ -200,8 +224,8 @@ class InstructPix2PixModel(pl.LightningModule):
         )
         # these weighting schemes use a uniform timestep sampling
         # and instead post-weight the loss
-        weighting = compute_loss_weighting_for_sd3(weighting_scheme="sigma_sqrt", sigmas=sigmas)
-        target = noise - model_input
+        weighting = compute_loss_weighting_for_sd3(weighting_scheme=None, sigmas=sigmas)
+        target = noise - cond_input
         return model_pred, target, weighting
         
 
@@ -303,7 +327,7 @@ class InstructPix2PixModel(pl.LightningModule):
 
     
     def configure_optimizers(self):
-        optimizer = FusedAdam(self.transformer.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+        optimizer = FusedAdam(self.transformer_lora_parameters, lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.max_epochs)
         scheduler_dict = {
             "scheduler": scheduler,
