@@ -50,7 +50,6 @@ def initialize_session_state():
         st.session_state.generated_image = None
         st.session_state.show_delete_confirmation = False
         st.session_state.show_download_confirmation = False
-        st.session_state.seed = None
 
 def clear_gpu_memory():
     """Clear GPU memory and cache."""
