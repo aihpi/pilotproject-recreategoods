@@ -2,7 +2,11 @@
 *.pt
 
 *.jsonl
+train/wandb
+dataset_generation/ViT-L-14.pt
 dataset_generation/lightning_logs/
+train/FLUX-Training
+train/checkpoints
 .vscode/
 dataset_generation/data/*/
 *.csv

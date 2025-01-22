@@ -1,0 +1,23 @@
+data:
+  batch_size: 8
+  val_batch_size: 8
+  num_workers: 8
+  data_dir: "/workspace/dataset/p2p-dataset-filtered"
+  resize_res: [1024, 1024]
+model:
+  name: "shuttleai/shuttle-3.1-aesthetic"
+  dtype: "bfloat16"
+  learning_rate: 1e-4
+  weight_decay: 1e-4
+  max_epochs: 20
+  scheduler:
+    step_size: 10
+    gamma: 0.1
+  
+
+training:
+  gpus: 1
+  num_nodes: 2
+  val_check_interval: 500
+  accumulate_grad_batches: 2
+  precision: "bf16-mixed"
