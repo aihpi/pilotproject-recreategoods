@@ -26,24 +26,18 @@ def highlight_text(text, search_term):
 def clean_caption(caption):
     return caption.replace('Neutral Gray Background, ', '')
 
-# Load the dataset
 dataset = load_dataset()
 
-# Convert dataset to list for filtering
 dataset_list = [sample for sample in dataset]
 
-# Sidebar filters
 st.sidebar.header("Filters")
 
-# Get unique values for filters
 all_statuses = sorted(list(set(sample.get('status', 'N/A') for sample in dataset_list)))
 all_classes = sorted(list(set(sample.get('class_name', 'N/A') for sample in dataset_list)))
 
-# Create filters
 selected_status = st.sidebar.multiselect("Status", all_statuses, default=all_statuses)
 selected_classes = st.sidebar.multiselect("Class", all_classes, default=[])
 
-# Text search fields
 st.sidebar.markdown("### Text Search")
 with st.sidebar.form("text_search"):
     edit_instruction_search = st.text_input("Search in Edit Instructions").lower()
@@ -51,7 +45,6 @@ with st.sidebar.form("text_search"):
     resulting_caption_search = st.text_input("Search in Resulting Captions").lower()
     search_submitted = st.form_submit_button("Search")
 
-# Initialize session state for search terms if not exists
 if 'search_terms' not in st.session_state:
     st.session_state.search_terms = {
         'edit_instruction': '',
@@ -59,7 +52,6 @@ if 'search_terms' not in st.session_state:
         'resulting_caption': ''
     }
 
-# Update search terms only when search is submitted
 if search_submitted:
     st.session_state.search_terms = {
         'edit_instruction': edit_instruction_search,
@@ -67,18 +59,14 @@ if search_submitted:
         'resulting_caption': resulting_caption_search
     }
 
-# Filter the dataset
 filtered_dataset = []
 for sample in dataset_list:
-    # Status filter
     if sample.get('status', 'N/A') not in selected_status:
         continue
         
-    # Class filter - if no classes selected, show all
     if selected_classes and sample.get('class_name', 'N/A') not in selected_classes:
         continue
         
-    # Text search filters
     if st.session_state.search_terms['edit_instruction'] and \
        st.session_state.search_terms['edit_instruction'] not in str(sample.get('edit_instruction', '')).lower():
         continue
@@ -91,10 +79,8 @@ for sample in dataset_list:
         
     filtered_dataset.append(sample)
 
-# Display dataset info
 st.write(f"Dataset size: {len(filtered_dataset)} samples (filtered) out of {len(dataset)} total samples")
 
-# Create a paginated view
 items_per_page = 20
 total_pages = len(filtered_dataset) // items_per_page + (1 if len(filtered_dataset) % items_per_page > 0 else 0)
 
@@ -102,20 +88,15 @@ page = st.number_input("Page", min_value=1, max_value=max(1, total_pages), value
 start_idx = page * items_per_page
 end_idx = min(start_idx + items_per_page, len(filtered_dataset))
 
-# Display current page info
 st.write(f"Showing items {start_idx + 1} to {end_idx} of {len(filtered_dataset)}")
 
-# Display samples in the current page
 for i in range(start_idx, end_idx):
     sample = filtered_dataset[i]
     
-    # Display sample information with status and class inline
     st.markdown(f"### {i}. &nbsp;&nbsp;&nbsp; {sample.get('status', 'N/A')} | {sample.get('class_name', 'N/A')}")
     
-    # Create columns for side-by-side display with instruction in middle
     col1, col2, col3 = st.columns([4, 3, 4])
     
-    # Display images and instruction
     with col1:
         st.write("Input Image")
         input_image = decode_image(sample["input_image"])
@@ -139,5 +120,3 @@ for i in range(start_idx, end_idx):
         st.markdown(highlighted_resulting, unsafe_allow_html=True)
     
     st.divider()
-
-
