@@ -1,202 +1,143 @@
 import streamlit as st
-import json
-from pathlib import Path
 from PIL import Image
-from utils.config_loader import load_config
-import argparse
-import numpy as np
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Streamlit App for Dataset Viewer")
-    parser.add_argument("--config_path", type=str, required=True, help="Path to the YAML configuration file")
-    args, _ = parser.parse_known_args()  # Ignore unrecognized args for Streamlit
-    return args
+from io import BytesIO
+import datasets
+import pandas as pd
+import re
 
-# Parse arguments
-args = parse_arguments()
-config = load_config(args.config_path)
+st.set_page_config(layout="wide", page_title="Fashion Edit Dataset Viewer")
 
-# Set paths to data directories
-DATA_DIR = config.output_dir
-
-st.set_page_config(layout="wide")
-
-def load_metadata_and_images(data_dir):
-    """Traverse subdirectories to load metadata and associated images."""
-    all_data = []
-    for subdir in Path(data_dir).iterdir():
-        if subdir.is_dir():
-            metadata_file = subdir / "metadata.jsonl"
-            prompt_file = subdir / "prompt.json"
-            if metadata_file.exists() and prompt_file.exists():
-                # Load prompt.json
-                with open(prompt_file, "r") as pf:
-                    prompt_data = json.load(pf).get("prompt", {})
-
-                # Load metadata.jsonl
-                with open(metadata_file, "r") as f:
-                    for line in f:
-                        try:
-                            metadata = json.loads(line.strip())
-                            seed = metadata.get("seed")
-                            image_0 = subdir / f"{seed}_0.jpg"
-                            image_1 = subdir / f"{seed}_1.jpg"
-
-                            # Check if images exist
-                            if image_0.exists() and image_1.exists():
-                                metadata["image_0"] = image_0
-                                metadata["image_1"] = image_1
-                                metadata["prompt"] = prompt_data  # Include prompt.json data
-                                all_data.append(metadata)
-                            else:
-                                print(f"Skipping due to missing files: {seed}")
-                        except Exception as e:
-                            print(f"Error loading metadata from {metadata_file}: {e}")
-    print(f"Loaded {len(all_data)} entries from {data_dir}")
-    return all_data
-
-
-
-def filter_metadata(metadata):
-    """Filter metadata to include only specified keys."""
-    keys_to_display = [
-        "seed", "clip_sim_0", "clip_sim_1", "clip_sim_dir", "clip_sim_image",
-        "amplify_factor", "suppress_factor", "shared_factor", "p2p_threshold",
-        "cfg_scale", "self_replace_steps"
-    ]
-    return {key: metadata[key] for key in keys_to_display if key in metadata}
+st.title("Fashion Edit Dataset Viewer")
 
 @st.cache_data
-def get_data():
-    """Cache loaded data to optimize performance."""
-    return load_metadata_and_images(DATA_DIR)
+def load_dataset():
+    dataset = datasets.load_dataset("AI-ServicesBB/fashion-edit-dataset", split="val")
+    return dataset
 
-# Load data
-data = get_data()
+def decode_image(image_bytes):
+    return Image.open(BytesIO(image_bytes))
 
-# Sidebar options
-st.sidebar.header("Filter Options")
-filter_keyword = st.sidebar.text_input("Filter by keyword in metadata", "")
-st.sidebar.markdown(f"### Total Entries: {len(data)}")
+def highlight_text(text, search_term):
+    if not search_term:
+        return text
+    pattern = re.compile(f'({re.escape(search_term)})', re.IGNORECASE)
+    return pattern.sub(r'<span style="background-color: #FFFF00">\1</span>', text)
 
-def navigate(step):
-    st.session_state.index = max(0, min(len(data) - 1, st.session_state.index + step))
+def clean_caption(caption):
+    return caption.replace('Neutral Gray Background, ', '')
 
-# Filter data
-if filter_keyword:
-    data = [item for item in data if filter_keyword.lower() in json.dumps(item).lower()]
-    st.sidebar.markdown(f"### Filtered Entries: {len(data)}")
+# Load the dataset
+dataset = load_dataset()
 
-if "stats" not in st.session_state:
-    st.session_state.stats = {
-        "clip_sim_dir": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
-        "clip_sim_image": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
-        "amplify_factor": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
-        "suppress_factor": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
-        "shared_factor": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
-        "p2p_threshold": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
-        "cfg_scale": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
-        "self_replace_steps": {"min": float('inf'), "max": float('-inf'), "min_sum": 0.0, "min_count": 0, "max_sum": 0.0, "max_count": 0},
+# Convert dataset to list for filtering
+dataset_list = [sample for sample in dataset]
+
+# Sidebar filters
+st.sidebar.header("Filters")
+
+# Get unique values for filters
+all_statuses = sorted(list(set(sample.get('status', 'N/A') for sample in dataset_list)))
+all_classes = sorted(list(set(sample.get('class_name', 'N/A') for sample in dataset_list)))
+
+# Create filters
+selected_status = st.sidebar.multiselect("Status", all_statuses, default=all_statuses)
+selected_classes = st.sidebar.multiselect("Class", all_classes, default=[])
+
+# Text search fields
+st.sidebar.markdown("### Text Search")
+with st.sidebar.form("text_search"):
+    edit_instruction_search = st.text_input("Search in Edit Instructions").lower()
+    original_caption_search = st.text_input("Search in Original Captions").lower()
+    resulting_caption_search = st.text_input("Search in Resulting Captions").lower()
+    search_submitted = st.form_submit_button("Search")
+
+# Initialize session state for search terms if not exists
+if 'search_terms' not in st.session_state:
+    st.session_state.search_terms = {
+        'edit_instruction': '',
+        'original_caption': '',
+        'resulting_caption': ''
     }
 
-def update_stats(metadata):
-    """Update min, max, and running averages for each metadata key."""
-    for key, values in st.session_state.stats.items():
-        curr_min, curr_max = calculate_average(values)
-        value = metadata[key]
-        # Update min and max
-        if value < values["min"]:
-            values["min"] = value
-        if value > values["max"]:
-            values["max"] = value
+# Update search terms only when search is submitted
+if search_submitted:
+    st.session_state.search_terms = {
+        'edit_instruction': edit_instruction_search,
+        'original_caption': original_caption_search,
+        'resulting_caption': resulting_caption_search
+    }
 
-        if value < curr_min:
-             values["min_sum"] -= value
-        else:
-            values["min_sum"] += value
-        values["min_count"] += 1
-        if value > curr_max:
-            values["max_sum"] += value
-        else:
-            values["max_sum"] -= value
-        values["max_count"] += 1
+# Filter the dataset
+filtered_dataset = []
+for sample in dataset_list:
+    # Status filter
+    if sample.get('status', 'N/A') not in selected_status:
+        continue
+        
+    # Class filter - if no classes selected, show all
+    if selected_classes and sample.get('class_name', 'N/A') not in selected_classes:
+        continue
+        
+    # Text search filters
+    if st.session_state.search_terms['edit_instruction'] and \
+       st.session_state.search_terms['edit_instruction'] not in str(sample.get('edit_instruction', '')).lower():
+        continue
+    if st.session_state.search_terms['original_caption'] and \
+       st.session_state.search_terms['original_caption'] not in str(sample.get('original_caption', '')).lower():
+        continue
+    if st.session_state.search_terms['resulting_caption'] and \
+       st.session_state.search_terms['resulting_caption'] not in str(sample.get('resulting_caption', '')).lower():
+        continue
+        
+    filtered_dataset.append(sample)
 
+# Display dataset info
+st.write(f"Dataset size: {len(filtered_dataset)} samples (filtered) out of {len(dataset)} total samples")
 
+# Create a paginated view
+items_per_page = 20
+total_pages = len(filtered_dataset) // items_per_page + (1 if len(filtered_dataset) % items_per_page > 0 else 0)
 
-def calculate_average(values):
-    """Calculate average min and max."""
-    avg_min = values["min_sum"] / values["min_count"] if values["min_count"] > 0 else 0.0
-    avg_max = values["max_sum"] / values["max_count"] if values["max_count"] > 0 else 0.0
-    return avg_min, avg_max
+page = st.number_input("Page", min_value=1, max_value=max(1, total_pages), value=1) - 1
+start_idx = page * items_per_page
+end_idx = min(start_idx + items_per_page, len(filtered_dataset))
 
-# Display data
-st.title("Dataset Viewer: Images and Metadata")
-st.markdown("View images side by side with their corresponding metadata.")
-if not data:
-    st.warning("No data to display. Adjust the filter or check your dataset.")
-else:
-    if "index" not in st.session_state:
-        st.session_state.index = 0
-    current_item = data[st.session_state.index]
-    # Keyboard navigation logic
-    st.markdown("""
-        <script>
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'ArrowRight') {
-                window.location.href = "/?index=" + (parseInt(new URL(window.location.href).searchParams.get("index") || 0) + 1);
-            }
-            if (event.key === 'ArrowLeft') {
-                window.location.href = "/?index=" + Math.max(0, parseInt(new URL(window.location.href).searchParams.get("index") || 0) - 1);
-            }
-        });
-        </script>
-    """, unsafe_allow_html=True)
-     # Sidebar navigation for index
-    st.sidebar.write("Use Arrow Keys or Sidebar to Navigate")
-    st.sidebar.button("⬅️ Previous", on_click=lambda: navigate(-1))
-    st.sidebar.button("Next ➡️", on_click=lambda: navigate(1))
-    st.sidebar.write("### Original Caption")
-    st.sidebar.write(current_item["prompt"].get("original_caption", "N/A"))
-    st.sidebar.write("### Edit Instruction")
-    st.sidebar.write(current_item["prompt"].get("edit_instruction", "N/A"))
-    st.sidebar.write("### Resulting Caption")
-    st.sidebar.write(current_item["prompt"].get("resulting_caption", "N/A"))
+# Display current page info
+st.write(f"Showing items {start_idx + 1} to {end_idx} of {len(filtered_dataset)}")
 
-    # Display current data
-    st.markdown(f"### Entry {st.session_state.index + 1} of {len(data)}")
-    # Display images in a row
-    cols = st.columns(2)
-    with cols[0]:
-        st.image(Image.open(current_item["image_0"]), caption=f"original image", use_container_width=True, width=512)
-    with cols[1]:
-        st.image(Image.open(current_item["image_1"]), caption=f"resulting image", use_container_width=True, width=512)
-    # Thumbs Up and Thumbs Down buttons
-    st.write("### Rate the data")
-    thumbs_cols = st.columns(2)
-    with thumbs_cols[0]:
-        if st.button("👍 Thumbs Up"):
-            update_stats(current_item)
-            st.success("Values updated with thumbs up!")
-
-    with thumbs_cols[1]:
-        if st.button("👎 Thumbs Down"):
-            st.warning("No changes were made.")
-
-    # Display current min and max values
-    st.write("### Current Stats")
-    for key, values in st.session_state.stats.items():
-        avg_min, avg_max = calculate_average(values)
-        st.write(f"**{key}**:")
-        st.write(f"  - Found Min = {values['min']:.4f}, Avg Min = {avg_min:.4f}")
-        st.write(f"  - Found Max = {values['max']:.4f}, Avg Max = {avg_max:.4f}")
-    # Display metadata underneath the row of images
-    st.markdown("#### Metadata")
-
-    # Display the selected entry
-    current_item = data[st.session_state.index]
-    filtered_metadata = filter_metadata(current_item)
-    st.json(filtered_metadata)
-
+# Display samples in the current page
+for i in range(start_idx, end_idx):
+    sample = filtered_dataset[i]
     
+    # Display sample information with status and class inline
+    st.markdown(f"### {i}. &nbsp;&nbsp;&nbsp; {sample.get('status', 'N/A')} | {sample.get('class_name', 'N/A')}")
     
+    # Create columns for side-by-side display with instruction in middle
+    col1, col2, col3 = st.columns([4, 3, 4])
+    
+    # Display images and instruction
+    with col1:
+        st.write("Input Image")
+        input_image = decode_image(sample["input_image"])
+        st.image(input_image, use_container_width=True)
+        highlighted_original = highlight_text(clean_caption(sample['original_caption']), 
+                                           st.session_state.search_terms['original_caption'])
+        st.markdown(highlighted_original, unsafe_allow_html=True)
+        
+    with col2:
+        st.write("Edit Instruction")
+        highlighted_instruction = highlight_text(sample['edit_instruction'], 
+                                              st.session_state.search_terms['edit_instruction'])
+        st.markdown(f"**{highlighted_instruction}**", unsafe_allow_html=True)
+        
+    with col3:
+        st.write("Output Image")
+        output_image = decode_image(sample["output_image"])
+        st.image(output_image, use_container_width=True)
+        highlighted_resulting = highlight_text(clean_caption(sample['resulting_caption']), 
+                                            st.session_state.search_terms['resulting_caption'])
+        st.markdown(highlighted_resulting, unsafe_allow_html=True)
+    
+    st.divider()
 
-st.sidebar.info("Scroll down to view all entries.")
+
