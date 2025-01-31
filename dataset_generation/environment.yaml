@@ -13,7 +13,7 @@ dependencies:
   - pip
   - pip:
     - albumentations==0.4.3
-    - datasets==2.8.0
+    - datasets>=3.2.0
     - diffusers
     - opencv-python>=4.5.0
     - pudb==2019.2
