@@ -26,6 +26,13 @@ def highlight_text(text, search_term):
 def clean_caption(caption):
     return caption.replace('Neutral Gray Background, ', '')
 
+def toggle_filter(value, current_selection):
+    """Toggle a value in the filter selection"""
+    if value in current_selection:
+        return [x for x in current_selection if x != value]
+    else:
+        return sorted(current_selection + [value])
+
 dataset = load_dataset()
 
 dataset_list = [sample for sample in dataset]
@@ -35,8 +42,13 @@ st.sidebar.header("Filters")
 all_statuses = sorted(list(set(sample.get('status', 'N/A') for sample in dataset_list)))
 all_classes = sorted(list(set(sample.get('class_name', 'N/A') for sample in dataset_list)))
 
-selected_status = st.sidebar.multiselect("Status", all_statuses, default=all_statuses)
-selected_classes = st.sidebar.multiselect("Class", all_classes, default=[])
+if 'selected_status' not in st.session_state:
+    st.session_state.selected_status = all_statuses
+if 'selected_classes' not in st.session_state:
+    st.session_state.selected_classes = []
+
+selected_status = st.sidebar.multiselect("Status", all_statuses, default=st.session_state.selected_status)
+selected_classes = st.sidebar.multiselect("Class", all_classes, default=st.session_state.selected_classes)
 
 st.sidebar.markdown("### Text Search")
 with st.sidebar.form("text_search"):
@@ -93,7 +105,21 @@ st.write(f"Showing items {start_idx + 1} to {end_idx} of {len(filtered_dataset)}
 for i in range(start_idx, end_idx):
     sample = filtered_dataset[i]
     
-    st.markdown(f"### {i}. &nbsp;&nbsp;&nbsp; {sample.get('status', 'N/A')} | {sample.get('class_name', 'N/A')}")
+    status = sample.get('status', 'N/A')
+    class_name = sample.get('class_name', 'N/A')
+    
+    st.write(f"### {i}.")
+    col_header1, col_header2 = st.columns([6, 6])
+    with col_header1:
+        if st.button(f"📎 {status}", key=f"status_{i}"):
+            st.session_state.selected_status = toggle_filter(status, 
+                st.session_state.selected_status)
+            st.rerun()
+    with col_header2:
+        if st.button(f"🏷️ {class_name}", key=f"class_{i}"):
+            st.session_state.selected_classes = toggle_filter(class_name, 
+                st.session_state.selected_classes)
+            st.rerun()
     
     col1, col2, col3 = st.columns([4, 3, 4])
     
