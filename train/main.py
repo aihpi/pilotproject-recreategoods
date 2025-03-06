@@ -33,6 +33,65 @@ import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
 from pytorch_lightning.strategies import DeepSpeedStrategy
 import psutil
+import resource
+import gc
+import threading
+import time
+
+# Set a higher limit for open files
+try:
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print(f"Current file descriptor limits: soft={soft}, hard={hard}")
+    # Set soft limit to hard limit or a reasonable value
+    new_soft = min(hard, 65536)  # Use hard limit or 65536, whichever is smaller
+    resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+    print(f"Updated file descriptor limits: soft={new_soft}, hard={hard}")
+except Exception as e:
+    print(f"Warning: Could not set file descriptor limits: {e}")
+
+def monitor_resources():
+    """
+    Monitor system resources and perform cleanup when necessary.
+    This function runs in a separate thread.
+    """
+    while True:
+        try:
+            # Check memory usage
+            memory = psutil.virtual_memory()
+            if memory.percent > 90:
+                print(f"WARNING: High memory usage detected ({memory.percent}%). Forcing garbage collection.")
+                gc.collect()
+                torch.cuda.empty_cache()
+            
+            # Check file descriptor usage
+            try:
+                # Count open file descriptors
+                proc = psutil.Process()
+                open_files = proc.open_files()
+                open_connections = proc.connections()
+                total_fds = len(open_files) + len(open_connections)
+                
+                # Get current limits
+                soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+                
+                # If we're using more than 80% of our soft limit, clean up
+                if total_fds > soft * 0.8:
+                    print(f"WARNING: High file descriptor usage detected ({total_fds}/{soft}). Cleaning up.")
+                    # Close unnecessary file descriptors
+                    for fd in range(3, soft):
+                        try:
+                            os.close(fd)
+                        except:
+                            pass
+                    gc.collect()
+            except Exception as e:
+                print(f"Error checking file descriptors: {e}")
+                
+        except Exception as e:
+            print(f"Error in resource monitoring: {e}")
+        
+        # Sleep for 30 seconds
+        time.sleep(30)
 
 def load_config(config_path: str):
     """
@@ -72,6 +131,11 @@ def main():
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
+    
+    # Start resource monitoring in a background thread
+    monitor_thread = threading.Thread(target=monitor_resources, daemon=True)
+    monitor_thread.start()
+    print("Started resource monitoring thread")
     
     # Check available disk space
     disk_space = psutil.disk_usage('/')

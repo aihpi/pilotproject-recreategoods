@@ -111,7 +111,33 @@ class EditDataset(Dataset):
             torch.cuda.empty_cache()
             gc.collect()
             
+            # Force Python to release file descriptors
+            import resource
+            try:
+                # Get current soft limit
+                soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+                # Set soft limit to hard limit temporarily to ensure we can close all files
+                resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+                # Close all file descriptors above 3 (stdin, stdout, stderr)
+                for fd in range(3, soft):
+                    try:
+                        os.close(fd)
+                    except:
+                        pass
+                # Reset to original limits
+                resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+            except Exception as e:
+                print(f"Warning: Could not reset file descriptors: {e}")
+            
         print(f"Processed {total_batches} batches out of {(len(metadata_per_rank) + batch_size - 1) // batch_size} total batches")
+        
+        # Final cleanup after all batches
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+        # Explicitly run garbage collection multiple times to ensure cleanup
+        for _ in range(5):
+            gc.collect()
     
     def _process_single_item(self, item, latent_data_path, latent_data_flipped_path):
         # Remove any existing latent data
@@ -126,6 +152,12 @@ class EditDataset(Dataset):
         vae_cpu = self.vae.to(device)
         text_encoder_cpu = self.text_encoder.to(device)
         text_encoder_2_cpu = self.text_encoder_2.to(device)
+        
+        # Variables to hold resources that need to be explicitly closed
+        input_image = None
+        output_image = None
+        input_image_flipped = None
+        output_image_flipped = None
         
         try:
             # Load and preprocess images
@@ -188,30 +220,62 @@ class EditDataset(Dataset):
                 )
 
             # Save processed data
-            torch.save({
+            data_to_save = {
                 "model_input": model_input.detach().cpu(),
                 "cond_input": cond_input.detach().cpu(),
                 "prompt_embeds": prompt_embeds.detach().cpu(),
                 "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
                 "text_ids": text_ids.detach().cpu(),
                 "vae_scale_factor": vae_scale_factor,
-            }, latent_data_path)
+            }
+            torch.save(data_to_save, latent_data_path)
+            # Clear references to large tensors
+            del data_to_save
 
             # TODO: Re-enable flipped versions when disk space is available
             if self.use_flipped_versions and latent_data_flipped_path is not None and model_input_flipped is not None:
-                torch.save({
+                data_to_save_flipped = {
                     "model_input": model_input_flipped.detach().cpu(),
                     "cond_input": cond_input_flipped.detach().cpu(),
                     "prompt_embeds": prompt_embeds.detach().cpu(),
                     "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
                     "text_ids": text_ids.detach().cpu(),
                     "vae_scale_factor": vae_scale_factor,
-                }, latent_data_flipped_path)
+                }
+                torch.save(data_to_save_flipped, latent_data_flipped_path)
+                # Clear references to large tensors
+                del data_to_save_flipped
+                
+            # Explicitly delete tensors to free memory
+            del input_tensor, output_tensor
+            if input_tensor_flipped is not None:
+                del input_tensor_flipped, output_tensor_flipped
+            del cond_input, model_input
+            if cond_input_flipped is not None:
+                del cond_input_flipped, model_input_flipped
+            del prompt_embeds, pooled_prompt_embeds, text_ids
+            del tokens_one, tokens_two
+            
         finally:
             # Move models back to original device
             self.vae.to(self.device)
             self.text_encoder.to(self.device)
             self.text_encoder_2.to(self.device)
+            
+            # Explicitly close image files
+            if input_image is not None:
+                input_image.close()
+            if output_image is not None:
+                output_image.close()
+            if input_image_flipped is not None:
+                input_image_flipped.close()
+            if output_image_flipped is not None:
+                output_image_flipped.close()
+                
+            # Force garbage collection
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
 
     def __getitem__(self, idx):
         item = self.metadata[idx]
@@ -222,16 +286,26 @@ class EditDataset(Dataset):
         
         # Load original latent data
         if latent_data_path.exists():
-            latent_data = torch.load(latent_data_path)
-            return latent_data
-        else:
-            # If latent data doesn't exist, process it on the fly
-            print(f"Warning: Latent data not found for {input_image_path}, processing on the fly")
-            output_image_path = self.data_dir / item["output_image"]
-            
-            # Process on CPU to save memory
-            device = "cpu"
-            
+            try:
+                latent_data = torch.load(latent_data_path)
+                return latent_data
+            except Exception as e:
+                print(f"Error loading latent data for {input_image_path}: {e}")
+                # If loading fails, process on the fly
+                pass
+        
+        # If latent data doesn't exist or loading failed, process it on the fly
+        print(f"Warning: Latent data not found for {input_image_path}, processing on the fly")
+        output_image_path = self.data_dir / item["output_image"]
+        
+        # Process on CPU to save memory
+        device = "cpu"
+        
+        # Variables to hold resources that need to be explicitly closed
+        input_image = None
+        output_image = None
+        
+        try:
             # Load and preprocess images
             input_image = Image.open(input_image_path).convert("RGB")
             output_image = Image.open(output_image_path).convert("RGB")
@@ -249,35 +323,76 @@ class EditDataset(Dataset):
             input_tensor = transform(input_image).unsqueeze(0).to(device)
             output_tensor = transform(output_image).unsqueeze(0).to(device)
             
-            # Encode images to latent space
-            with torch.no_grad():
-                cond_input = self.vae.encode(input_tensor).latent_dist.sample()
-                model_input = self.vae.encode(output_tensor).latent_dist.sample()
+            # Move models to CPU for processing
+            vae_cpu = self.vae.to(device)
+            text_encoder_cpu = self.text_encoder.to(device)
+            text_encoder_2_cpu = self.text_encoder_2.to(device)
             
-            # VAE scale factor
-            vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
-            
-            # Tokenize prompts
-            tokens_one = tokenize_prompt(self.tokenizer, item["edit_instruction"], max_sequence_length=77)
-            tokens_two = tokenize_prompt(self.tokenizer_2, item["edit_instruction"], max_sequence_length=256)
-            
-            with torch.no_grad():
-                prompt_embeds, pooled_prompt_embeds, text_ids = encode_prompt(
-                    text_encoders=[self.text_encoder, self.text_encoder_2],
-                    tokenizers=[None, None],
-                    text_input_ids_list=[tokens_one, tokens_two],
-                    max_sequence_length=256,
-                    prompt=item["edit_instruction"],
-                )
-            
-            return {
-                "model_input": model_input.detach(),
-                "cond_input": cond_input.detach(),
-                "prompt_embeds": prompt_embeds.detach(),
-                "pooled_prompt_embeds": pooled_prompt_embeds.detach(),
-                "text_ids": text_ids.detach(),
-                "vae_scale_factor": vae_scale_factor,
-            }
+            try:
+                # Encode images to latent space
+                with torch.no_grad():
+                    cond_input = vae_cpu.encode(input_tensor).latent_dist.sample()
+                    model_input = vae_cpu.encode(output_tensor).latent_dist.sample()
+                
+                # VAE scale factor
+                vae_scale_factor = 2 ** (len(vae_cpu.config.block_out_channels) - 1)
+                
+                # Tokenize prompts
+                tokens_one = tokenize_prompt(self.tokenizer, item["edit_instruction"], max_sequence_length=77)
+                tokens_two = tokenize_prompt(self.tokenizer_2, item["edit_instruction"], max_sequence_length=256)
+                
+                # Process text
+                with torch.no_grad():
+                    prompt_embeds, pooled_prompt_embeds, text_ids = encode_prompt(
+                        text_encoders=[text_encoder_cpu, text_encoder_2_cpu],
+                        tokenizers=[None, None],
+                        text_input_ids_list=[tokens_one, tokens_two],
+                        max_sequence_length=256,
+                        prompt=item["edit_instruction"],
+                    )
+                
+                # Create result dictionary
+                result = {
+                    "model_input": model_input.detach().cpu(),
+                    "cond_input": cond_input.detach().cpu(),
+                    "prompt_embeds": prompt_embeds.detach().cpu(),
+                    "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
+                    "text_ids": text_ids.detach().cpu(),
+                    "vae_scale_factor": vae_scale_factor,
+                }
+                
+                # Save the processed data for future use
+                try:
+                    torch.save(result, latent_data_path)
+                except Exception as e:
+                    print(f"Warning: Could not save latent data for {input_image_path}: {e}")
+                
+                return result
+            finally:
+                # Move models back to original device
+                self.vae.to(self.device)
+                self.text_encoder.to(self.device)
+                self.text_encoder_2.to(self.device)
+                
+                # Explicitly delete tensors to free memory
+                del input_tensor, output_tensor
+                if 'cond_input' in locals():
+                    del cond_input, model_input
+                if 'prompt_embeds' in locals():
+                    del prompt_embeds, pooled_prompt_embeds, text_ids
+                if 'tokens_one' in locals():
+                    del tokens_one, tokens_two
+                
+                # Force garbage collection
+                import gc
+                gc.collect()
+                torch.cuda.empty_cache()
+        finally:
+            # Explicitly close image files
+            if input_image is not None:
+                input_image.close()
+            if output_image is not None:
+                output_image.close()
 
     def __len__(self):
         return len(self.metadata)
@@ -374,7 +489,50 @@ class FLUXDataModule(pl.LightningDataModule):
         self.valid_test_res = valid_test_res
         self.model_name = model_name
 
+        # Add a cleanup method that will be called periodically
+        self.cleanup_resources()
+    
+    def cleanup_resources(self):
+        """
+        Clean up resources to prevent memory and file descriptor leaks.
+        This method should be called periodically during training.
+        """
+        import gc
+        import torch
+        import os
+        import resource
         
+        # Force garbage collection
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        # Try to close unnecessary file descriptors
+        try:
+            # Get current limits
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            
+            # Close file descriptors above 3 (stdin, stdout, stderr)
+            # but be careful not to close important ones
+            for fd in range(100, soft):  # Start from a higher number to avoid closing important FDs
+                try:
+                    os.close(fd)
+                except:
+                    pass
+        except Exception as e:
+            print(f"Warning: Could not clean up file descriptors: {e}")
+        
+        # Schedule next cleanup
+        import threading
+        import time
+        
+        def delayed_cleanup():
+            time.sleep(300)  # Run cleanup every 5 minutes
+            self.cleanup_resources()
+        
+        # Start cleanup thread
+        cleanup_thread = threading.Thread(target=delayed_cleanup, daemon=True)
+        cleanup_thread.start()
+    
     def _load_models(self, ckpt_name):
         models = {}
         model_components = ["vae", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
@@ -392,27 +550,62 @@ class FLUXDataModule(pl.LightningDataModule):
         
         print(f"Loading models from {ckpt_name} using cache directory: {cache_dir}")
         
+        # Clean up before loading models
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        # Close any unnecessary file descriptors before loading models
+        try:
+            import resource
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            # Close file descriptors above 100 (to avoid closing important ones)
+            for fd in range(100, soft):
+                try:
+                    os.close(fd)
+                except:
+                    pass
+        except Exception as e:
+            print(f"Warning: Could not clean up file descriptors before loading models: {e}")
+        
         try:
             # Try loading with DiffusionPipeline which can handle various model architectures
             from diffusers import DiffusionPipeline
             import torch
             
             print(f"Attempting to load {ckpt_name} as a DiffusionPipeline...")
-            pipe = DiffusionPipeline.from_pretrained(
-                ckpt_name,
-                cache_dir=cache_dir,
-                torch_dtype=torch.bfloat16,
-                use_safetensors=True,
-            )
             
-            # Extract components from the pipeline
-            models["vae"] = pipe.vae
-            models["text_encoder"] = pipe.text_encoder
-            models["tokenizer"] = pipe.tokenizer
-            models["text_encoder_2"] = pipe.text_encoder_2
-            models["tokenizer_2"] = pipe.tokenizer_2
+            # Load components one by one to better manage memory
+            pipe_kwargs = {
+                "cache_dir": cache_dir,
+                "torch_dtype": torch.bfloat16,
+                "use_safetensors": True,
+                # Load only necessary components to save memory
+                "low_cpu_mem_usage": True,
+                "device_map": "auto",  # Let the library decide optimal device placement
+            }
             
-            print(f"Successfully loaded model {ckpt_name} as DiffusionPipeline")
+            # Use a context manager to ensure resources are properly released
+            import contextlib
+            with contextlib.ExitStack() as stack:
+                # Load the pipeline
+                pipe = DiffusionPipeline.from_pretrained(ckpt_name, **pipe_kwargs)
+                
+                # Extract components from the pipeline
+                models["vae"] = pipe.vae
+                models["text_encoder"] = pipe.text_encoder
+                models["tokenizer"] = pipe.tokenizer
+                models["text_encoder_2"] = pipe.text_encoder_2
+                models["tokenizer_2"] = pipe.tokenizer_2
+                
+                # Remove references to the pipeline to free memory
+                del pipe
+                
+                # Force garbage collection
+                gc.collect()
+                torch.cuda.empty_cache()
+                
+                print(f"Successfully loaded model {ckpt_name} as DiffusionPipeline")
             
         except Exception as e:
             print(f"Failed to load {ckpt_name} as DiffusionPipeline: {e}")
@@ -425,11 +618,17 @@ class FLUXDataModule(pl.LightningDataModule):
                     from diffusers import FluxPipeline
                     import torch
                     
+                    # Clean up before loading
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    
                     pipe = FluxPipeline.from_pretrained(
                         ckpt_name,
                         cache_dir=cache_dir,
                         torch_dtype=torch.bfloat16,
                         use_safetensors=True,
+                        low_cpu_mem_usage=True,
+                        device_map="auto",
                     )
                     
                     # Extract components from the pipeline
@@ -438,6 +637,11 @@ class FLUXDataModule(pl.LightningDataModule):
                     models["tokenizer"] = pipe.tokenizer
                     models["text_encoder_2"] = pipe.text_encoder_2
                     models["tokenizer_2"] = pipe.tokenizer_2
+                    
+                    # Remove references to the pipeline
+                    del pipe
+                    gc.collect()
+                    torch.cuda.empty_cache()
                     
                     print(f"Successfully loaded model {ckpt_name} as FluxPipeline")
                 except ImportError:
@@ -450,6 +654,10 @@ class FLUXDataModule(pl.LightningDataModule):
                 # Try loading individual components directly
                 try:
                     print("Attempting to load individual components directly...")
+                    
+                    # Clean up before loading individual components
+                    gc.collect()
+                    torch.cuda.empty_cache()
                     
                     # Try to load each component individually
                     for component in model_components:
@@ -468,8 +676,14 @@ class FLUXDataModule(pl.LightningDataModule):
                                 subfolder=component,
                                 cache_dir=cache_dir,
                                 use_safetensors=True,
+                                low_cpu_mem_usage=True if hasattr(model_class, "from_pretrained") else None,
                             )
                             print(f"Successfully loaded {component}")
+                            
+                            # Clean up after each component
+                            gc.collect()
+                            torch.cuda.empty_cache()
+                            
                         except Exception as component_error:
                             print(f"Failed to load {component}: {component_error}")
                             
@@ -490,77 +704,150 @@ class FLUXDataModule(pl.LightningDataModule):
                     print(f"Failed to load individual components: {individual_error}")
                     raise Exception(f"Failed to load model {ckpt_name} with any available method")
         
+        # Final cleanup after loading all models
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        # Close any unnecessary file descriptors after loading models
+        try:
+            import resource
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            # Close file descriptors above 100 (to avoid closing important ones)
+            for fd in range(100, soft):
+                try:
+                    os.close(fd)
+                except:
+                    pass
+        except Exception as e:
+            print(f"Warning: Could not clean up file descriptors after loading models: {e}")
+        
         return models
     
     def setup(self, stage=None):
         """Preprocess latents and prepare datasets."""
         
         if stage in (None, "fit"):
+            # Clean up resources before loading models
+            import gc
+            import os
+            import resource
+            
+            # Force garbage collection
+            gc.collect()
+            torch.cuda.empty_cache()
+            
+            # Close any unnecessary file descriptors
+            try:
+                soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+                # Close file descriptors above 100 (to avoid closing important ones)
+                for fd in range(100, soft):
+                    try:
+                        os.close(fd)
+                    except:
+                        pass
+            except Exception as e:
+                print(f"Warning: Could not clean up file descriptors before setup: {e}")
+            
             # Load models
             try:
+                print("Loading models for preprocessing...")
                 models = self._load_models(self.model_name)
+                print("Models loaded successfully")
             except Exception as e:
                 print(f"ERROR: Failed to load models: {e}")
                 print("This is a critical error. Cannot continue without models.")
                 import sys
                 sys.exit(1)
             
-            # Process in smaller batches to save memory
-            import gc
-            
             print("TESTING MODE: Using limited dataset (10 batches only)")
             
             # First process validation dataset
             print("Setting up validation dataset...")
-            self.val_dataset = EditDatasetVal(
-                path=self.data_dir / "val",
-                metadata_file=self.data_dir / "val/val_metadata.json",
-                width_resize=self.width_resize,
-                height_resize=self.height_resize,
-            )
+            try:
+                self.val_dataset = EditDatasetVal(
+                    path=self.data_dir / "val",
+                    metadata_file=self.data_dir / "val/val_metadata.json",
+                    width_resize=self.width_resize,
+                    height_resize=self.height_resize,
+                )
+                print("Validation dataset setup complete")
+            except Exception as e:
+                print(f"Error setting up validation dataset: {e}")
+                # Continue anyway, as training dataset is more important
             
             # Clear memory before processing training dataset
             torch.cuda.empty_cache()
             gc.collect()
             
+            # Close any unnecessary file descriptors again
+            try:
+                for fd in range(100, soft):
+                    try:
+                        os.close(fd)
+                    except:
+                        pass
+            except Exception:
+                pass
+            
             # Then process training dataset
             print("Setting up training dataset...")
-            self.train_dataset = EditDataset(
-                path=self.data_dir / "train",
-                metadata_file=self.data_dir / "train/train_metadata.json",
-                width_resize=self.width_resize,
-                height_resize=self.height_resize,
-                vae=models["vae"],
-                tokenizer=models["tokenizer"],
-                tokenizer_2=models["tokenizer_2"],
-                text_encoder=models["text_encoder"],
-                text_encoder_2=models["text_encoder_2"],
-                device="cuda",
-                preprocess=True,
-            )
+            try:
+                self.train_dataset = EditDataset(
+                    path=self.data_dir / "train",
+                    metadata_file=self.data_dir / "train/train_metadata.json",
+                    width_resize=self.width_resize,
+                    height_resize=self.height_resize,
+                    vae=models["vae"],
+                    tokenizer=models["tokenizer"],
+                    tokenizer_2=models["tokenizer_2"],
+                    text_encoder=models["text_encoder"],
+                    text_encoder_2=models["text_encoder_2"],
+                    device="cuda",
+                    preprocess=True,
+                )
+                print("Training dataset setup complete")
+            except Exception as e:
+                print(f"ERROR: Failed to set up training dataset: {e}")
+                print("This is a critical error. Cannot continue without training dataset.")
+                import sys
+                sys.exit(1)
 
             # Clear CUDA cache after preprocessing
             torch.cuda.empty_cache()
             gc.collect()
             
             # Move models to CPU and clear memory
+            print("Moving models to CPU and clearing memory...")
             to_cpu = ["vae", "text_encoder", "text_encoder_2"]
             for component in to_cpu: 
                 models[component].to("cpu")
             
             # Clear references to free memory
+            for key in list(models.keys()):
+                models[key] = None
             models = None
-            torch.cuda.empty_cache()
-            gc.collect()
+            
+            # Force garbage collection multiple times
+            for _ in range(3):
+                gc.collect()
+                torch.cuda.empty_cache()
+            
+            print("Setup complete for training")
 
 
         if stage in (None, "test"):
-            self.test_dataset = EditDatasetVal(
-                path=self.data_dir / "test",
-                metadata_file=self.data_dir / "test/test_metadata.json",
-                width_resize=self.width_resize,
-                height_resize=self.height_resize,
-            )
+            print("Setting up test dataset...")
+            try:
+                self.test_dataset = EditDatasetVal(
+                    path=self.data_dir / "test",
+                    metadata_file=self.data_dir / "test/test_metadata.json",
+                    width_resize=self.width_resize,
+                    height_resize=self.height_resize,
+                )
+                print("Test dataset setup complete")
+            except Exception as e:
+                print(f"Error setting up test dataset: {e}")
+                # Continue anyway, as this might not be critical
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
