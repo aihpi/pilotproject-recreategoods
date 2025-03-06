@@ -18,9 +18,9 @@ os.environ["TRANSFORMERS_CACHE"] = "/workspace/hf_cache/transformers"
 os.environ["HF_DATASETS_CACHE"] = "/workspace/hf_cache/datasets"
 
 # Create cache directories
-os.makedirs("/tmp/huggingface", exist_ok=True)
-os.makedirs("/tmp/huggingface/transformers", exist_ok=True)
-os.makedirs("/tmp/huggingface/datasets", exist_ok=True)
+os.makedirs("/workspace/hf_cache", exist_ok=True)
+os.makedirs("/workspace/hf_cache/transformers", exist_ok=True)
+os.makedirs("/workspace/hf_cache/datasets", exist_ok=True)
 
 import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
@@ -92,6 +92,11 @@ def main():
     try:
         # Clear cache directories
         cache_dirs = [
+            # Don't clear our workspace cache directory
+            # "/workspace/hf_cache",
+            # "/workspace/hf_cache/transformers",
+            # "/workspace/hf_cache/datasets",
+            # Clear old cache directories
             "/tmp/huggingface", 
             "/tmp/huggingface/transformers", 
             "/tmp/huggingface/datasets",
