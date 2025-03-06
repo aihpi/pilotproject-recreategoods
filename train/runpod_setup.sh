@@ -79,22 +79,41 @@ export PATH="/workspace/miniconda/bin:$PATH"
 source /workspace/miniconda/etc/profile.d/conda.sh
 conda activate train-model
 
-while true; do
-    # Check disk usage of the workspace filesystem
-    DISK_USAGE=$(df -h /workspace | awk 'NR==2 {print $5}' | sed 's/%//')
-    if [ "$DISK_USAGE" -gt 85 ]; then
-        echo "WARNING: Workspace disk usage is at $DISK_USAGE%. Cleaning up..."
-        # Clean up old checkpoints, keeping only the latest 3
+monitor_disk_space() {
+    echo "===== Disk Space Check ====="
+    
+    # Check root filesystem
+    ROOT_AVAIL=$(df -h / | awk 'NR==2 {print $4}')
+    ROOT_TOTAL=$(df -h / | awk 'NR==2 {print $2}')
+    ROOT_USAGE=$(df -h / | awk 'NR==2 {print $5}')
+    ROOT_USAGE_PCT=$(echo $ROOT_USAGE | sed 's/%//')
+    
+    # Check workspace filesystem
+    WORKSPACE_AVAIL=$(df -h /workspace | awk 'NR==2 {print $4}')
+    WORKSPACE_TOTAL=$(df -h /workspace | awk 'NR==2 {print $2}')
+    WORKSPACE_USAGE=$(df -h /workspace | awk 'NR==2 {print $5}')
+    WORKSPACE_USAGE_PCT=$(echo $WORKSPACE_USAGE | sed 's/%//')
+    
+    echo "$(date) - Root: $ROOT_AVAIL available of $ROOT_TOTAL ($ROOT_USAGE used)"
+    echo "$(date) - Workspace: $WORKSPACE_AVAIL available of $WORKSPACE_TOTAL ($WORKSPACE_USAGE used)"
+    
+    # Clean up if workspace is getting full
+    if [ "$WORKSPACE_USAGE_PCT" -gt 85 ]; then
+        echo "$(date) - WARNING: Workspace disk usage is high ($WORKSPACE_USAGE). Cleaning up..."
         if [ -d "/workspace/recreategoods/train/checkpoints" ]; then
             find /workspace/recreategoods/train/checkpoints -type d -name "epoch=*" | sort | head -n -3 | xargs rm -rf 2>/dev/null || true
         fi
     fi
+}
+
+while true; do
+    monitor_disk_space >> /workspace/disk_monitor.log
     sleep 300  # Check every 5 minutes
 done
 EOL
 
 chmod +x /workspace/monitor_disk.sh
-nohup /workspace/monitor_disk.sh > /workspace/disk_monitor.log 2>&1 &
+nohup /workspace/monitor_disk.sh > /dev/null 2>&1 &
 
 echo ""
 echo "============================================================"

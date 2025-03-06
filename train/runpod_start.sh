@@ -17,17 +17,36 @@ if [[ "$CONDA_DEFAULT_ENV" != "train-model" ]]; then
     exit 0
 fi
 
-# Create a simple disk monitoring function
+# Create a comprehensive disk monitoring function
 monitor_disk_space() {
-    local threshold=85
-    # Check disk usage of the workspace filesystem
-    local disk_usage=$(df -h /workspace | awk 'NR==2 {print $5}' | sed 's/%//')
-    if [ "$disk_usage" -gt "$threshold" ]; then
-        echo "WARNING: Workspace disk usage is at ${disk_usage}%. Consider cleaning up old files."
+    echo "===== Disk Space Information ====="
+    
+    # Check root filesystem
+    ROOT_AVAIL=$(df -h / | awk 'NR==2 {print $4}')
+    ROOT_TOTAL=$(df -h / | awk 'NR==2 {print $2}')
+    ROOT_USAGE=$(df -h / | awk 'NR==2 {print $5}')
+    echo "Root filesystem (/): $ROOT_AVAIL available of $ROOT_TOTAL ($ROOT_USAGE used)"
+    
+    # Check workspace filesystem
+    if [ -d "/workspace" ]; then
+        WORKSPACE_AVAIL=$(df -h /workspace | awk 'NR==2 {print $4}')
+        WORKSPACE_TOTAL=$(df -h /workspace | awk 'NR==2 {print $2}')
+        WORKSPACE_USAGE=$(df -h /workspace | awk 'NR==2 {print $5}')
+        echo "Workspace filesystem (/workspace): $WORKSPACE_AVAIL available of $WORKSPACE_TOTAL ($WORKSPACE_USAGE used)"
+        
+        # Check if workspace is getting full
+        WORKSPACE_USAGE_PCT=$(echo $WORKSPACE_USAGE | sed 's/%//')
+        if [ "$WORKSPACE_USAGE_PCT" -gt 85 ]; then
+            echo "WARNING: Workspace disk usage is high ($WORKSPACE_USAGE). Consider cleaning up old files."
+        fi
+    else
+        echo "Workspace directory not found."
     fi
+    
+    echo "=================================="
 }
 
-# Run disk space check once
+# Run disk space check
 monitor_disk_space
 
 # Check available GPU memory and adjust batch size if needed
