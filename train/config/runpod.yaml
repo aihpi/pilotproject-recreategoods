@@ -25,4 +25,4 @@ training:
   precision: "bf16-mixed"
   wandb_run_name: "FLUX-Fashion-Edit-RunPod"
   gradient_clip_val: 1.0
-  strategy: "deepspeed_stage_2" 
+  strategy: "deepspeed_stage_3_offload" 

@@ -56,6 +56,9 @@ class EditDataset(Dataset):
     def _precompute_and_save(self):
         current_rank = torch.distributed.get_rank()
         metadata_per_rank = self.metadata[current_rank::torch.distributed.get_world_size()]
+        
+        # Process in smaller batches to save memory
+        import gc
 
         for item in tqdm(metadata_per_rank, desc=f"Rank {current_rank} Precomputing latents and embeddings", disable=not current_rank == 0):
             input_image_path = self.data_dir / item["input_image"]
@@ -68,73 +71,88 @@ class EditDataset(Dataset):
             # Skip if both original and flipped latent data exist
             if latent_data_path.exists() and latent_data_flipped_path.exists():
                 continue
-            else:
-                # Remove any existing latent data
-                for path in input_image_path.parent.glob(f"{input_image_path.stem}.latent_data*.pt"):
-                    path.unlink()
+                
+            try:
+                # Process this item
+                self._process_single_item(item, latent_data_path, latent_data_flipped_path)
+                
+                # Clear cache after each item to prevent memory buildup
+                torch.cuda.empty_cache()
+                gc.collect()
+            except Exception as e:
+                print(f"Error processing item {item}: {e}")
+                continue
+    
+    def _process_single_item(self, item, latent_data_path, latent_data_flipped_path):
+        # Remove any existing latent data
+        for path in latent_data_path.parent.glob(f"{latent_data_path.stem}.latent_data*.pt"):
+            path.unlink()
 
-            # Define transformations
-            transform = transforms.Compose([
-                transforms.Resize((self.width_resize, self.height_resize)),
-                transforms.ToTensor(),
-                transforms.Normalize([0.5], [0.5]),
-            ])
-            horizontal_flip = transforms.RandomHorizontalFlip(p=1.0)
+        input_image_path = self.data_dir / item["input_image"]
+        output_image_path = self.data_dir / item["output_image"]
+        
+        # Load and preprocess images
+        input_image = Image.open(input_image_path).convert("RGB")
+        output_image = Image.open(output_image_path).convert("RGB")
+        
+        # Resize images
+        input_image = input_image.resize((self.width_resize, self.height_resize), Image.LANCZOS)
+        output_image = output_image.resize((self.width_resize, self.height_resize), Image.LANCZOS)
+        
+        # Create flipped versions
+        input_image_flipped = input_image.transpose(Image.FLIP_LEFT_RIGHT)
+        output_image_flipped = output_image.transpose(Image.FLIP_LEFT_RIGHT)
+        
+        # Convert to tensors
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([0.5], [0.5]),
+        ])
+        
+        input_tensor = transform(input_image).unsqueeze(0).to(self.device)
+        output_tensor = transform(output_image).unsqueeze(0).to(self.device)
+        input_tensor_flipped = transform(input_image_flipped).unsqueeze(0).to(self.device)
+        output_tensor_flipped = transform(output_image_flipped).unsqueeze(0).to(self.device)
+        
+        # Encode images to latent space
+        cond_input = self.vae.encode(input_tensor).latent_dist.sample()
+        model_input = self.vae.encode(output_tensor).latent_dist.sample()
 
-            # Load original images
-            input_image = Image.open(input_image_path).convert("RGB")
-            output_image = Image.open(output_image_path).convert("RGB")
+        # Encode flipped images
+        cond_input_flipped = self.vae.encode(input_tensor_flipped).latent_dist.sample()
+        model_input_flipped = self.vae.encode(output_tensor_flipped).latent_dist.sample()
 
-            # Original images tensor
-            input_tensor = transform(input_image).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
-            output_tensor = transform(output_image).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
+        # VAE scale factor
+        vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
 
-            # Horizontally flipped images tensor
-            input_image_flipped = horizontal_flip(input_image)
-            output_image_flipped = horizontal_flip(output_image)
-            input_tensor_flipped = transform(input_image_flipped).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
-            output_tensor_flipped = transform(output_image_flipped).unsqueeze(0).to(dtype=self.vae.dtype, device=self.device)
+        # Tokenize prompts
+        tokens_one = tokenize_prompt(self.tokenizer, item["edit_instruction"], max_sequence_length=77)
+        tokens_two = tokenize_prompt(self.tokenizer_2, item["edit_instruction"], max_sequence_length=256)
+        prompt_embeds, pooled_prompt_embeds, text_ids = encode_prompt(
+            text_encoders=[self.text_encoder, self.text_encoder_2],
+            tokenizers=[None, None],
+            text_input_ids_list=[tokens_one, tokens_two],
+            max_sequence_length=256,
+            prompt=item["edit_instruction"],
+        )
 
-            # Encode original images
-            cond_input = self.vae.encode(input_tensor).latent_dist.sample()
-            model_input = self.vae.encode(output_tensor).latent_dist.sample()
+        torch.save({
+            "model_input": model_input.detach().cpu(),
+            "cond_input": cond_input.detach().cpu(),
+            "prompt_embeds": prompt_embeds.detach().cpu(),
+            "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
+            "text_ids": text_ids.detach().cpu(),
+            "vae_scale_factor": vae_scale_factor,
+        }, latent_data_path)
 
-            # Encode flipped images
-            cond_input_flipped = self.vae.encode(input_tensor_flipped).latent_dist.sample()
-            model_input_flipped = self.vae.encode(output_tensor_flipped).latent_dist.sample()
-
-            # VAE scale factor
-            vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
-
-            # Tokenize prompts
-            tokens_one = tokenize_prompt(self.tokenizer, item["edit_instruction"], max_sequence_length=77)
-            tokens_two = tokenize_prompt(self.tokenizer_2, item["edit_instruction"], max_sequence_length=256)
-            prompt_embeds, pooled_prompt_embeds, text_ids = encode_prompt(
-                text_encoders=[self.text_encoder, self.text_encoder_2],
-                tokenizers=[None, None],
-                text_input_ids_list=[tokens_one, tokens_two],
-                max_sequence_length=256,
-                prompt=item["edit_instruction"],
-            )
-
-            torch.save({
-                "model_input": model_input.squeeze(0).detach().cpu(),
-                "cond_input": cond_input.squeeze(0).detach().cpu(),
-                "prompt_embeds": prompt_embeds.squeeze(0).detach().cpu(),
-                "pooled_prompt_embeds": pooled_prompt_embeds.squeeze(0).detach().cpu(),
-                "text_ids": text_ids,
-                "vae_scale_factor": vae_scale_factor,
-            }, latent_data_path)
-
-            torch.save({
-                "model_input": model_input_flipped.squeeze(0).detach().cpu(),
-                "cond_input": cond_input_flipped.squeeze(0).detach().cpu(),
-                "prompt_embeds": prompt_embeds.squeeze(0).detach().cpu(),
-                "pooled_prompt_embeds": pooled_prompt_embeds.squeeze(0).detach().cpu(),
-                "text_ids": text_ids,
-                "vae_scale_factor": vae_scale_factor,
-            }, latent_data_flipped_path)
-        torch.distributed.barrier()
+        torch.save({
+            "model_input": model_input_flipped.detach().cpu(),
+            "cond_input": cond_input_flipped.detach().cpu(),
+            "prompt_embeds": prompt_embeds.detach().cpu(),
+            "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
+            "text_ids": text_ids.detach().cpu(),
+            "vae_scale_factor": vae_scale_factor,
+        }, latent_data_flipped_path)
 
     def __getitem__(self, idx):
         item = self.metadata[idx]
@@ -284,6 +302,10 @@ class FLUXDataModule(pl.LightningDataModule):
         if stage in (None, "fit"):
             # Load models
             models = self._load_models(self.model_name)
+            
+            # Process in smaller batches to save memory
+            import gc
+            
             # Preprocess 
             self.train_dataset = EditDataset(
                 path=self.data_dir / "train",
@@ -299,18 +321,25 @@ class FLUXDataModule(pl.LightningDataModule):
                 preprocess=True,
             )
 
+            # Clear CUDA cache after preprocessing
+            torch.cuda.empty_cache()
+            gc.collect()
+
             self.val_dataset = EditDatasetVal(
                 path=self.data_dir / "val",
                 metadata_file=self.data_dir / "val/val_metadata.json",
                 width_resize=self.width_resize,
                 height_resize=self.height_resize,
             )
+            
+            # Move models to CPU and clear memory
             to_cpu = ["vae", "text_encoder", "text_encoder_2"]
             for component in to_cpu: 
                 models[component].to("cpu")
+            
+            # Clear references to free memory
             models = None
             torch.cuda.empty_cache()
-            import gc
             gc.collect()
 
 

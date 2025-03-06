@@ -3,7 +3,7 @@ from dataloader.data_module import FLUXDataModule
 from pipelines.train_pipeline_optim import InstructPix2PixModel
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import FSDPStrategy
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor, Callback
 import argparse
 from omegaconf import OmegaConf
 import os
@@ -28,6 +28,26 @@ def load_config(config_path: str):
         raise RuntimeError(f"An unexpected error occurred while loading the config file: {e}")
 
 
+# Add a memory monitoring callback
+class MemoryMonitorCallback(Callback):
+    def __init__(self, rank=0):
+        super().__init__()
+        self.rank = rank
+    
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if batch_idx % 10 == 0 and trainer.global_rank == self.rank:  # Log every 10 batches
+            allocated = torch.cuda.memory_allocated() / 1e9
+            reserved = torch.cuda.memory_reserved() / 1e9
+            print(f"Batch {batch_idx}: GPU memory allocated: {allocated:.2f} GB, reserved: {reserved:.2f} GB")
+            
+    def on_validation_start(self, trainer, pl_module):
+        if trainer.global_rank == self.rank:
+            print("\nGPU memory at validation start:")
+            allocated = torch.cuda.memory_allocated() / 1e9
+            reserved = torch.cuda.memory_reserved() / 1e9
+            print(f"GPU memory allocated: {allocated:.2f} GB, reserved: {reserved:.2f} GB")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str, required=True)
@@ -44,6 +64,16 @@ def main():
             print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
             print(f"Available system memory: {psutil.virtual_memory().available / 1e9:.2f} GB")
             print(f"Disk space: {psutil.disk_usage('/').free / 1e9:.2f} GB free of {psutil.disk_usage('/').total / 1e9:.2f} GB")
+            
+            # Add GPU memory monitoring function
+            def print_gpu_memory():
+                print(f"GPU memory allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                print(f"GPU memory reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+                print(f"GPU memory free: {torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated() - torch.cuda.memory_reserved() / 1e9:.2f} GB")
+            
+            # Print initial GPU memory state
+            print("Initial GPU memory state:")
+            print_gpu_memory()
         except Exception as e:
             print(f"Warning: Could not get system information: {e}")
 
@@ -64,6 +94,14 @@ def main():
     )
     
     print(f"Using optimized pipeline: {model.__class__.__module__}")
+    
+    # Print GPU memory after model initialization
+    if local_rank == 0:
+        try:
+            print("\nGPU memory after model initialization:")
+            print_gpu_memory()
+        except Exception as e:
+            print(f"Warning: Could not get memory information: {e}")
     
     # Initialize WandB Logger
     wandb_logger = WandbLogger(
@@ -114,6 +152,18 @@ def main():
             allgather_bucket_size=5e8,
             reduce_bucket_size=5e8,
         )
+    elif "strategy" in training_config and training_config["strategy"] == "deepspeed_stage_3_offload":
+        strategy = DeepSpeedStrategy(
+            stage=3,
+            offload_optimizer=True,
+            offload_parameters=True,
+            allgather_bucket_size=2e8,
+            reduce_bucket_size=2e8,
+            pin_memory=True,
+            offload_optimizer_device="cpu",
+            offload_param_device="cpu",
+            cpu_checkpointing=True,
+        )
     elif "strategy" in training_config and training_config["strategy"] == "fsdp":
         strategy = FSDPStrategy(
             mixed_precision=MixedPrecision(
@@ -139,8 +189,16 @@ def main():
         check_val_every_n_epoch=training_config.get("check_val_every_n_epoch", 1),
         accumulate_grad_batches=training_config.get("accumulate_grad_batches", 1),
         log_every_n_steps=1, 
-        callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor],
+        callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor, MemoryMonitorCallback(local_rank)],
     )
+    
+    # Print GPU memory before training starts
+    if local_rank == 0:
+        try:
+            print("\nGPU memory before training starts:")
+            print_gpu_memory()
+        except Exception as e:
+            print(f"Warning: Could not get memory information: {e}")
 
     trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_from_checkpoint)
 
