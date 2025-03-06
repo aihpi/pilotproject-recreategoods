@@ -1,0 +1,28 @@
+data:
+  batch_size: 4
+  val_batch_size: 4
+  num_workers: 4
+  data_dir: "/workspace/dataset"
+  resize_res: [256, 256]
+
+model:
+  name: "shuttleai/shuttle-3.1-aesthetic"
+  dtype: "bfloat16"
+  learning_rate: 1e-4
+  weight_decay: 1e-4
+  max_epochs: 20
+  l2sp_weight: 1e-4
+  scheduler:
+    step_size: 10
+    gamma: 0.1
+  
+
+training:
+  gpus: 1
+  num_nodes: 1
+  check_val_every_n_epoch: 4
+  accumulate_grad_batches: 16
+  precision: "bf16-mixed"
+  wandb_run_name: "FLUX-Fashion-Edit-RunPod"
+  gradient_clip_val: 1.0
+  strategy: "deepspeed_stage_2" 
