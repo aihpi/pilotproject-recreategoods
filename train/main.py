@@ -8,6 +8,7 @@ import argparse
 from omegaconf import OmegaConf
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
 from pytorch_lightning.strategies import DeepSpeedStrategy
@@ -61,6 +62,8 @@ def main():
     model = InstructPix2PixModel(
         args=config["model"],
     )
+    
+    print(f"Using optimized pipeline: {model.__class__.__module__}")
     
     # Initialize WandB Logger
     wandb_logger = WandbLogger(

@@ -23,7 +23,7 @@ import lpips
 import torch.distributed as dist
 # from peft import LoraConfig, set_peft_model_state_dict
 # from peft.utils import get_peft_model_state_dict
-from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
+from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
 from peft import LoraConfig
 
 
@@ -96,7 +96,7 @@ class InstructPix2PixModel(pl.LightningModule):
                 "text_encoder": CLIPTextModel,
                 "tokenizer": CLIPTokenizer,
                 "text_encoder_2": T5EncoderModel,
-                "tokenizer_2": T5TokenizerFast,
+                "tokenizer_2": T5Tokenizer,
             }[component]
             # Load each component using the corresponding subfolder
             models[component] = model_class.from_pretrained(
