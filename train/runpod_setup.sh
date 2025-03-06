@@ -5,18 +5,30 @@ set -e
 mkdir -p /workspace
 cd /workspace
 
-# Check if conda is installed, if not install it
+# Check if conda is installed or if the miniconda directory exists
 if ! command -v conda &> /dev/null; then
-    echo "Conda not found. Installing Miniconda..."
+    if [ -d "/workspace/miniconda" ]; then
+        echo "Miniconda directory exists but conda command not found. Adding to PATH..."
+        export PATH="/workspace/miniconda/bin:$PATH"
+        
+        # Initialize conda for bash if not already done
+        if ! grep -q "conda initialize" ~/.bashrc; then
+            echo "Initializing conda in .bashrc..."
+            /workspace/miniconda/bin/conda init bash
+        fi
+    else
+        echo "Conda not found. Installing Miniconda..."
+        
+        # Download and install Miniconda
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+        bash miniconda.sh -b -p /workspace/miniconda
+        
+        # Add conda initialization to .bashrc
+        /workspace/miniconda/bin/conda init bash
+        
+        echo "Conda installed successfully."
+    fi
     
-    # Download and install Miniconda
-    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-    bash miniconda.sh -b -p /workspace/miniconda
-    
-    # Add conda initialization to .bashrc
-    /workspace/miniconda/bin/conda init bash
-    
-    echo "Conda installed successfully."
     echo ""
     echo "============================================================"
     echo "IMPORTANT: To use conda, you need to either:"
