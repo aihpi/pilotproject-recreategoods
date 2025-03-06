@@ -755,12 +755,16 @@ class FLUXDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         """Preprocess latents and prepare datasets."""
         
+        logger = logging.getLogger("FLUXDataModule.setup")
+        
         if stage in (None, "fit"):
             # Clean up resources before loading models
             import gc
             import os
             import resource
             import torch
+            
+            logger.info(f"Setting up for stage: {stage}")
             
             # Force garbage collection
             gc.collect()
@@ -776,23 +780,23 @@ class FLUXDataModule(pl.LightningDataModule):
                     except:
                         pass
             except Exception as e:
-                print(f"Warning: Could not clean up file descriptors before setup: {e}")
+                logger.warning(f"Could not clean up file descriptors before setup: {e}")
             
             # Load models
             try:
-                print("Loading models for preprocessing...")
+                logger.info("Loading models for preprocessing...")
                 models = self._load_models(self.model_name)
-                print("Models loaded successfully")
+                logger.info("Models loaded successfully")
             except Exception as e:
-                print(f"ERROR: Failed to load models: {e}")
+                logger.error(f"Failed to load models: {e}")
                 print("This is a critical error. Cannot continue without models.")
                 import sys
                 sys.exit(1)
             
-            print("TESTING MODE: Using limited dataset (10 batches only)")
+            logger.info("TESTING MODE: Using limited dataset (10 batches only)")
             
             # First process validation dataset
-            print("Setting up validation dataset...")
+            logger.info("Setting up validation dataset...")
             try:
                 self.val_dataset = EditDatasetVal(
                     path=self.data_dir / "val",
@@ -800,9 +804,9 @@ class FLUXDataModule(pl.LightningDataModule):
                     width_resize=self.width_resize,
                     height_resize=self.height_resize,
                 )
-                print("Validation dataset setup complete")
+                logger.info("Validation dataset setup complete")
             except Exception as e:
-                print(f"Error setting up validation dataset: {e}")
+                logger.error(f"Error setting up validation dataset: {e}")
                 # Continue anyway, as training dataset is more important
             
             # Clear memory before processing training dataset
@@ -820,7 +824,7 @@ class FLUXDataModule(pl.LightningDataModule):
                 pass
             
             # Then process training dataset
-            print("Setting up training dataset...")
+            logger.info("Setting up training dataset...")
             try:
                 self.train_dataset = EditDataset(
                     path=self.data_dir / "train",
@@ -835,9 +839,9 @@ class FLUXDataModule(pl.LightningDataModule):
                     device="cuda",
                     preprocess=True,
                 )
-                print("Training dataset setup complete")
+                logger.info("Training dataset setup complete")
             except Exception as e:
-                print(f"ERROR: Failed to set up training dataset: {e}")
+                logger.error(f"Failed to set up training dataset: {e}")
                 print("This is a critical error. Cannot continue without training dataset.")
                 import sys
                 sys.exit(1)
@@ -847,7 +851,7 @@ class FLUXDataModule(pl.LightningDataModule):
             gc.collect()
             
             # Move models to CPU and clear memory
-            print("Moving models to CPU and clearing memory...")
+            logger.info("Moving models to CPU and clearing memory...")
             to_cpu = ["vae", "text_encoder", "text_encoder_2"]
             for component in to_cpu: 
                 models[component].to("cpu")
@@ -862,11 +866,15 @@ class FLUXDataModule(pl.LightningDataModule):
                 gc.collect()
                 torch.cuda.empty_cache()
             
-            print("Setup complete for training")
+            logger.info("Setup complete for training")
+            
+            # Add a debug log to track what happens next
+            logger.info("About to return from setup method - any operations after this are not in the setup method")
 
 
         if stage in (None, "test"):
-            print("Setting up test dataset...")
+            logger = logging.getLogger("FLUXDataModule.setup.test")
+            logger.info("Setting up test dataset...")
             try:
                 self.test_dataset = EditDatasetVal(
                     path=self.data_dir / "test",
@@ -874,16 +882,22 @@ class FLUXDataModule(pl.LightningDataModule):
                     width_resize=self.width_resize,
                     height_resize=self.height_resize,
                 )
-                print("Test dataset setup complete")
+                logger.info("Test dataset setup complete")
             except Exception as e:
-                print(f"Error setting up test dataset: {e}")
+                logger.error(f"Error setting up test dataset: {e}")
                 # Continue anyway, as this might not be critical
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
+        logger = logging.getLogger("FLUXDataModule.train_dataloader")
+        logger.info("Creating training dataloader")
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
+        logger = logging.getLogger("FLUXDataModule.val_dataloader")
+        logger.info("Creating validation dataloader")
+        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+        logger = logging.getLogger("FLUXDataModule.test_dataloader")
+        logger.info("Creating test dataloader")
+        return DataLoader(self.test_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers)

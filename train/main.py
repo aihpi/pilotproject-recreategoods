@@ -90,7 +90,8 @@ def monitor_resources():
                 # Count open file descriptors
                 proc = psutil.Process()
                 open_files = proc.open_files()
-                open_connections = proc.connections()
+                # Use net_connections() instead of connections() to avoid deprecation warning
+                open_connections = proc.net_connections()
                 total_fds = len(open_files) + len(open_connections)
                 
                 # Get current limits
@@ -310,6 +311,8 @@ def main():
     )
     
     print(f"Using optimized pipeline: {model.__class__.__module__}")
+    logger = logging.getLogger("main")
+    logger.info("Model initialized, about to set up trainer")
     
     # Print GPU memory after model initialization
     if local_rank == 0:
@@ -325,6 +328,8 @@ def main():
         name=config["training"]["wandb_run_name"],
         log_model=True, 
     )
+    
+    logger.info("WandB logger initialized")
     
     # Create checkpoint directory if it doesn't exist
     checkpoint_dir = os.path.join(os.getcwd(), "train", "checkpoints")
@@ -349,10 +354,14 @@ def main():
     
     lr_monitor = LearningRateMonitor(logging_interval="step")
     
+    logger.info("Callbacks initialized")
+    
     training_config = config["training"]
     
-    # Configure strategy based on config
-    if "strategy" in training_config and training_config["strategy"] == "deepspeed_stage_2":
+    # Set up the trainer
+    logger.info("Setting up trainer")
+    
+    if training_config["strategy"] == "deepspeed":
         strategy = DeepSpeedStrategy(
             stage=2,
             offload_optimizer=True,
@@ -360,59 +369,44 @@ def main():
             allgather_bucket_size=5e8,
             reduce_bucket_size=5e8,
         )
-    elif "strategy" in training_config and training_config["strategy"] == "deepspeed_stage_3":
-        strategy = DeepSpeedStrategy(
-            stage=3,
-            offload_optimizer=True,
-            offload_parameters=True,
-            allgather_bucket_size=5e8,
-            reduce_bucket_size=5e8,
-        )
-    elif "strategy" in training_config and training_config["strategy"] == "deepspeed_stage_3_offload":
-        strategy = DeepSpeedStrategy(
-            stage=3,
-            offload_optimizer=True,
-            offload_parameters=True,
-            allgather_bucket_size=2e8,
-            reduce_bucket_size=2e8,
-        )
-    elif "strategy" in training_config and training_config["strategy"] == "fsdp":
+    elif training_config["strategy"] == "fsdp":
         strategy = FSDPStrategy(
+            auto_wrap_policy=None,
+            activation_checkpointing=None,
             mixed_precision=MixedPrecision(
                 param_dtype=torch.bfloat16,
                 reduce_dtype=torch.bfloat16,
                 buffer_dtype=torch.bfloat16,
             ),
-            activation_checkpointing=True,
         )
     else:
-        strategy = "auto"
+        strategy = "ddp"
+    
+    logger.info(f"Using strategy: {strategy}")
     
     trainer = Trainer(
-        max_epochs=config["model"]["max_epochs"],
-        accelerator="gpu",
-        devices=training_config["gpus"],
-        num_nodes=training_config["num_nodes"],
+        max_epochs=training_config["max_epochs"],
+        logger=wandb_logger,
+        callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor, MemoryMonitorCallback()],
         strategy=strategy,
         precision=training_config["precision"],
-        logger=wandb_logger,
-        gradient_clip_val=training_config.get("gradient_clip_val", 1.0),
-        gradient_clip_algorithm="norm",
-        check_val_every_n_epoch=training_config.get("check_val_every_n_epoch", 1),
-        accumulate_grad_batches=training_config.get("accumulate_grad_batches", 1),
-        log_every_n_steps=1, 
-        callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor, MemoryMonitorCallback(local_rank)],
+        accelerator="gpu",
+        devices=training_config["devices"],
+        log_every_n_steps=10,
+        gradient_clip_val=training_config["gradient_clip_val"],
+        accumulate_grad_batches=training_config["accumulate_grad_batches"],
     )
     
-    # Print GPU memory before training starts
-    if local_rank == 0:
-        try:
-            print("\nGPU memory before training starts:")
-            print_gpu_memory()
-        except Exception as e:
-            print(f"Warning: Could not get memory information: {e}")
-
-    trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_from_checkpoint)
+    logger.info("Trainer set up, about to start training")
+    
+    # Start training
+    try:
+        logger.info("Starting training")
+        trainer.fit(model, data_module, ckpt_path=args.resume_from_checkpoint)
+        logger.info("Training completed successfully")
+    except Exception as e:
+        logger.error(f"Error during training: {e}")
+        raise
 
 
 if __name__ == "__main__":
