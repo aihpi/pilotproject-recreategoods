@@ -1,5 +1,5 @@
 import inspect
-import lightning as pl
+import pytorch_lightning as pl
 import torch
 from torchvision.utils import make_grid
 import json

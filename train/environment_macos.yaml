@@ -1,11 +1,10 @@
 name: train-model
 channels:
   - pytorch
-  - nvidia
   - conda-forge
   - defaults
 dependencies:
-  # Core dependencies for all platforms
+  # Core dependencies
   - python=3.10
   - pip
   - numpy
@@ -14,13 +13,10 @@ dependencies:
   - pandas
   - tqdm
   
-  # PyTorch dependencies - platform specific
+  # PyTorch dependencies for macOS (uses MPS acceleration on Apple Silicon)
   - pytorch::pytorch
   - pytorch::torchvision
   - pytorch::torchaudio
-  
-  # CUDA dependencies - only for Linux/Windows
-  - pytorch-cuda=12.1  # [linux or win]
   
   # Deep learning libraries
   - scikit-learn
