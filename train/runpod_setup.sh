@@ -13,19 +13,20 @@ if ! command -v conda &> /dev/null; then
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
     bash miniconda.sh -b -p /workspace/miniconda
     
-    # Add conda to path
-    export PATH="/workspace/miniconda/bin:$PATH"
-    
-    # Initialize conda for bash
+    # Add conda initialization to .bashrc
     /workspace/miniconda/bin/conda init bash
     
-    # Create a symlink to make conda available system-wide
-    ln -sf /workspace/miniconda/bin/conda /usr/local/bin/conda
-    
     echo "Conda installed successfully."
+    echo ""
+    echo "============================================================"
+    echo "IMPORTANT: To use conda, you need to either:"
+    echo "  1. Start a new terminal session, or"
+    echo "  2. Run: source ~/.bashrc"
+    echo "============================================================"
+    echo ""
     
-    # Source bashrc to get conda working in current session
-    source ~/.bashrc
+    # Export PATH for the current script
+    export PATH="/workspace/miniconda/bin:$PATH"
 else
     echo "Conda is already installed."
 fi
@@ -41,10 +42,13 @@ else
     git pull
 fi
 
+# Ensure conda is in PATH for this script
+export PATH="/workspace/miniconda/bin:$PATH"
+source /workspace/miniconda/etc/profile.d/conda.sh
+
 # Create conda environment
 echo "Setting up conda environment..."
 conda env create -f train/environment.yaml -n train-model || conda env update -f train/environment.yaml -n train-model
-source $(conda info --base)/etc/profile.d/conda.sh
 conda activate train-model
 
 # Install additional dependencies for smaller GPU
@@ -59,6 +63,10 @@ mkdir -p /workspace/dataset
 echo "Setting up disk space monitoring..."
 cat > /workspace/monitor_disk.sh << 'EOL'
 #!/bin/bash
+export PATH="/workspace/miniconda/bin:$PATH"
+source /workspace/miniconda/etc/profile.d/conda.sh
+conda activate train-model
+
 while true; do
     DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
     if [ "$DISK_USAGE" -gt 90 ]; then
@@ -73,12 +81,15 @@ EOL
 chmod +x /workspace/monitor_disk.sh
 nohup /workspace/monitor_disk.sh > /workspace/disk_monitor.log 2>&1 &
 
-# Add conda initialization to .bashrc if not already there
-if ! grep -q "conda initialize" ~/.bashrc; then
-    echo "Adding conda initialization to .bashrc..."
-    conda init bash
-    source ~/.bashrc
-fi
-
-echo "Setup complete! You can now run training with:"
-echo "cd /workspace/recreategoods && conda activate train-model && python train/main.py --config_path train/config/runpod.yaml" 
+echo ""
+echo "============================================================"
+echo "Setup complete! To use conda and start training:"
+echo ""
+echo "1. First, activate conda in your shell:"
+echo "   source ~/.bashrc"
+echo "   conda activate train-model"
+echo ""
+echo "2. Then, start training:"
+echo "   cd /workspace/recreategoods"
+echo "   python train/main.py --config_path train/config/runpod.yaml"
+echo "============================================================" 
