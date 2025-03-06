@@ -2,7 +2,7 @@ data:
   batch_size: 4
   val_batch_size: 4
   num_workers: 4
-  data_dir: "/workspace/dataset"
+  data_dir: "/workspace/recreategoods/fashion_stream_1000_split"
   resize_res: [256, 256]
 
 model:

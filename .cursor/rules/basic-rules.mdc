@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+- never create new scripts without asking
+- never change existing code structure without asking
+- never change existuing coding style without asking
