@@ -69,7 +69,8 @@ def main():
             def print_gpu_memory():
                 print(f"GPU memory allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
                 print(f"GPU memory reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
-                print(f"GPU memory free: {torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated() - torch.cuda.memory_reserved() / 1e9:.2f} GB")
+                free_memory = (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated() - torch.cuda.memory_reserved()) / 1e9
+                print(f"GPU memory free: {free_memory:.2f} GB")
             
             # Print initial GPU memory state
             print("Initial GPU memory state:")
@@ -159,10 +160,6 @@ def main():
             offload_parameters=True,
             allgather_bucket_size=2e8,
             reduce_bucket_size=2e8,
-            pin_memory=True,
-            offload_optimizer_device="cpu",
-            offload_param_device="cpu",
-            cpu_checkpointing=True,
         )
     elif "strategy" in training_config and training_config["strategy"] == "fsdp":
         strategy = FSDPStrategy(
