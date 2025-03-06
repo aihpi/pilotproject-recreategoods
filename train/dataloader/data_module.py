@@ -3,7 +3,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 from torch.utils.data import DataLoader
-import lightning as pl
+import pytorch_lightning as pl
 import json
 import os
 import random

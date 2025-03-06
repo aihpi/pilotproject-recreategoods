@@ -45,4 +45,5 @@ dependencies:
     - peft
     - einops
     - omegaconf
-    - safetensors 
+    - safetensors
+    - datasets 

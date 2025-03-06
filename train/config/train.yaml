@@ -2,7 +2,7 @@ data:
   batch_size: 32
   val_batch_size: 32
   num_workers: 8
-  data_dir: "/home/felix.boelter/recreategoods/dataset_generation/data/split-data"
+  data_dir: "/Users/tc/Repos/recreategoods/fashion_stream_1000_split"
   resize_res: [256, 256]
 
 model:
@@ -23,4 +23,4 @@ training:
   check_val_every_n_epoch: 4
   accumulate_grad_batches: 8
   precision: "bf16-mixed"
-  wandb_run_name: "FLUX-Full-Training"
+  wandb_run_name: "FLUX-Fashion-Edit-Training"

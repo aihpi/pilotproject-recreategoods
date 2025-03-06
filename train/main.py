@@ -1,16 +1,16 @@
-from lightning import Trainer
+from pytorch_lightning import Trainer
 from dataloader.data_module import FLUXDataModule
 from pipelines.train_pipeline_optim import InstructPix2PixModel
-from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.strategies import FSDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.strategies import FSDPStrategy
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 import argparse
 from omegaconf import OmegaConf
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
-from lightning.pytorch.strategies import DeepSpeedStrategy
+from pytorch_lightning.strategies import DeepSpeedStrategy
 
 def load_config(config_path: str):
     """

@@ -181,3 +181,5 @@ cython_debug/
 #.idea/
 generation_history.json
 webapp/history
+fashion_stream_1000
+fashion_stream_1000_split
