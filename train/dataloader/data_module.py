@@ -379,6 +379,13 @@ class FLUXDataModule(pl.LightningDataModule):
         models = {}
         model_components = ["vae", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
 
+        # Determine which cache directory to use
+        cache_dir = "/tmp/huggingface"
+        if os.path.exists("/workspace/hf_cache"):
+            cache_dir = "/workspace/hf_cache"
+        
+        print(f"Loading models from {ckpt_name} using cache directory: {cache_dir}")
+
         for component in model_components:
             model_class = {
                 "vae": AutoencoderKL,
@@ -388,9 +395,11 @@ class FLUXDataModule(pl.LightningDataModule):
                 "tokenizer_2": T5Tokenizer,
             }[component]
 
-            # Load each component using the corresponding subfolder
+            # Load each component using the corresponding subfolder and explicit cache_dir
             models[component] = model_class.from_pretrained(
-                ckpt_name, subfolder=component
+                ckpt_name, 
+                subfolder=component,
+                cache_dir=cache_dir
             )
         
         return models
