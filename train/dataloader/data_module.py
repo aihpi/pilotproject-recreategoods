@@ -13,11 +13,32 @@ import gc
 import resource
 import threading
 import time
+import logging
 from tqdm import tqdm
 from diffusers import AutoencoderKL, DiffusionPipeline
 from pipelines.tokenize import tokenize_prompt, encode_prompt
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
 
+# Configure logging to prevent errors
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+# Silence overly verbose loggers
+for logger_name in [
+    'transformers', 
+    'diffusers', 
+    'accelerate', 
+    'PIL', 
+    'httpx', 
+    'huggingface_hub',
+    'torch.distributed.distributed_c10d'
+]:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # TODO: Flipped versions of the data are currently disabled to save disk space.
 # When more disk space is available, re-enable flipped versions by:
@@ -71,8 +92,13 @@ class EditDataset(Dataset):
         current_rank = torch.distributed.get_rank()
         metadata_per_rank = self.metadata[current_rank::torch.distributed.get_world_size()]
         
+        # Set up logger for this rank
+        logger = logging.getLogger(f"EditDataset_Rank{current_rank}")
+        if current_rank != 0:
+            # Only the master process should log at INFO level
+            logger.setLevel(logging.WARNING)
+        
         # Process in smaller batches to save memory
-        import gc
         
         # Process in batches of 10 items
         batch_size = 10
@@ -83,13 +109,13 @@ class EditDataset(Dataset):
         for batch_idx in range(0, min(max_batches * batch_size, len(metadata_per_rank)), batch_size):
             batch_items = metadata_per_rank[batch_idx:batch_idx + batch_size]
             
-            print(f"Processing batch {batch_idx//batch_size + 1}/{total_batches}")
+            logger.info(f"Processing batch {batch_idx//batch_size + 1}/{total_batches}")
             
-            for item in tqdm(batch_items, desc=f"Rank {current_rank} Precomputing batch {batch_idx//batch_size + 1}"):
+            for item in tqdm(batch_items, desc=f"Rank {current_rank} Precomputing batch {batch_idx//batch_size + 1}", disable=current_rank != 0):
                 input_image_path = self.data_dir / item["input_image"]
                 output_image_path = self.data_dir / item["output_image"]
 
-                # Paths çfor original and augmented data
+                # Paths for original and augmented data
                 latent_data_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
                 
                 # TODO: Re-enable flipped versions when disk space is available
@@ -108,7 +134,7 @@ class EditDataset(Dataset):
                     # Process this item
                     self._process_single_item(item, latent_data_path, latent_data_flipped_path)
                 except Exception as e:
-                    print(f"Error processing item {item}: {e}")
+                    logger.error(f"Error processing item {item}: {e}")
                     continue
             
             # Clear cache after each batch to prevent memory buildup
@@ -116,14 +142,13 @@ class EditDataset(Dataset):
             gc.collect()
             
             # Force Python to release file descriptors
-            import resource
             try:
                 # Get current soft limit
                 soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
                 # Set soft limit to hard limit temporarily to ensure we can close all files
                 resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
                 # Close all file descriptors above 3 (stdin, stdout, stderr)
-                for fd in range(3, soft):
+                for fd in range(100, soft):
                     try:
                         os.close(fd)
                     except:
@@ -131,9 +156,9 @@ class EditDataset(Dataset):
                 # Reset to original limits
                 resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
             except Exception as e:
-                print(f"Warning: Could not reset file descriptors: {e}")
+                logger.warning(f"Could not reset file descriptors: {e}")
             
-        print(f"Processed {total_batches} batches out of {(len(metadata_per_rank) + batch_size - 1) // batch_size} total batches")
+        logger.info(f"Processed {total_batches} batches out of {(len(metadata_per_rank) + batch_size - 1) // batch_size} total batches")
         
         # Final cleanup after all batches
         torch.cuda.empty_cache()

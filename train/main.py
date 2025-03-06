@@ -2,6 +2,28 @@
 # Set environment variables BEFORE any imports
 import os
 import sys
+import logging
+
+# Configure logging to prevent errors
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+# Silence overly verbose loggers
+for logger_name in [
+    'transformers', 
+    'diffusers', 
+    'accelerate', 
+    'PIL', 
+    'httpx', 
+    'huggingface_hub',
+    'torch.distributed.distributed_c10d'
+]:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Set cache directory environment variables BEFORE importing any HF modules
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -132,6 +154,11 @@ def main():
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
     
+    # Fix for PyTorch distributed logging errors
+    if int(os.environ.get("LOCAL_RANK", 0)) != 0:
+        # Silence logging for non-master processes
+        logging.getLogger().setLevel(logging.ERROR)
+    
     # Start resource monitoring in a background thread
     monitor_thread = threading.Thread(target=monitor_resources, daemon=True)
     monitor_thread.start()
@@ -233,6 +260,17 @@ def main():
     config = load_config(args.config_path)
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
+    
+    # Fix for distributed initialization logging errors
+    if world_size > 1:
+        try:
+            # Initialize process group with NCCL backend
+            if not torch.distributed.is_initialized():
+                torch.distributed.init_process_group(backend="nccl")
+                print(f"Initialized process group with rank {local_rank}/{world_size}")
+        except Exception as e:
+            print(f"Warning: Could not initialize process group: {e}")
+    
     torch.cuda.set_device(local_rank)
 
     # Print system information for RunPod
