@@ -53,9 +53,12 @@ if conda activate train-model; then
     echo "Checking for key packages..."
     python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
     python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
-    if torch.cuda.is_available():
-        python -c "import torch; print(f'CUDA version: {torch.version.cuda}')"
-        python -c "import torch; print(f'GPU device: {torch.cuda.get_device_name(0)}')"
+    python -c "
+import torch
+if torch.cuda.is_available():
+    print(f'CUDA version: {torch.version.cuda}')
+    print(f'GPU device: {torch.cuda.get_device_name(0)}')
+"
     
     python -c "import transformers; print(f'Transformers version: {transformers.__version__}')"
     python -c "import diffusers; print(f'Diffusers version: {diffusers.__version__}')"
