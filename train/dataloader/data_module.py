@@ -15,6 +15,11 @@ from pipelines.tokenize import tokenize_prompt, encode_prompt
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
 
 
+# TODO: Flipped versions of the data are currently disabled to save disk space.
+# When more disk space is available, re-enable flipped versions by:
+# 1. Uncommenting the flipped version code in _process_single_item
+# 2. Updating the _precompute_and_save method to check for flipped versions
+# 3. Updating the __getitem__ method to randomly choose between original and flipped versions
 
 
 class EditDataset(Dataset):
@@ -33,6 +38,9 @@ class EditDataset(Dataset):
             device: Device to run computations (e.g., 'cuda' or 'cpu').
             preprocess (bool): Whether to preprocess and save latents/embeddings.
         """
+        # TODO: Re-enable flipped versions when disk space is available
+        self.use_flipped_versions = False  # Flag to control whether to use flipped versions
+        
         self.data_dir = Path(path)
         self.metadata_file = Path(metadata_file)
         
@@ -79,11 +87,18 @@ class EditDataset(Dataset):
 
                 # Paths for original and augmented data
                 latent_data_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
-                latent_data_flipped_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}_flipped.pt")
-
-                # Skip if both original and flipped latent data exist
-                if latent_data_path.exists() and latent_data_flipped_path.exists():
-                    continue
+                
+                # TODO: Re-enable flipped versions when disk space is available
+                latent_data_flipped_path = None
+                if self.use_flipped_versions:
+                    latent_data_flipped_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}_flipped.pt")
+                    # Skip if both original and flipped latent data exist
+                    if latent_data_path.exists() and latent_data_flipped_path.exists():
+                        continue
+                else:
+                    # Skip if original latent data exists
+                    if latent_data_path.exists():
+                        continue
                     
                 try:
                     # Process this item
@@ -121,9 +136,12 @@ class EditDataset(Dataset):
             input_image = input_image.resize((self.width_resize, self.height_resize), Image.LANCZOS)
             output_image = output_image.resize((self.width_resize, self.height_resize), Image.LANCZOS)
             
-            # Create flipped versions
-            input_image_flipped = input_image.transpose(Image.FLIP_LEFT_RIGHT)
-            output_image_flipped = output_image.transpose(Image.FLIP_LEFT_RIGHT)
+            # TODO: Re-enable flipped versions when disk space is available
+            input_image_flipped = None
+            output_image_flipped = None
+            if self.use_flipped_versions and latent_data_flipped_path is not None:
+                input_image_flipped = input_image.transpose(Image.FLIP_LEFT_RIGHT)
+                output_image_flipped = output_image.transpose(Image.FLIP_LEFT_RIGHT)
             
             # Convert to tensors
             transform = transforms.Compose([
@@ -134,15 +152,23 @@ class EditDataset(Dataset):
             # Process on CPU
             input_tensor = transform(input_image).unsqueeze(0).to(device)
             output_tensor = transform(output_image).unsqueeze(0).to(device)
-            input_tensor_flipped = transform(input_image_flipped).unsqueeze(0).to(device)
-            output_tensor_flipped = transform(output_image_flipped).unsqueeze(0).to(device)
+            
+            input_tensor_flipped = None
+            output_tensor_flipped = None
+            if self.use_flipped_versions and input_image_flipped is not None:
+                input_tensor_flipped = transform(input_image_flipped).unsqueeze(0).to(device)
+                output_tensor_flipped = transform(output_image_flipped).unsqueeze(0).to(device)
             
             # Encode images to latent space on CPU
             with torch.no_grad():
                 cond_input = vae_cpu.encode(input_tensor).latent_dist.sample()
                 model_input = vae_cpu.encode(output_tensor).latent_dist.sample()
-                cond_input_flipped = vae_cpu.encode(input_tensor_flipped).latent_dist.sample()
-                model_input_flipped = vae_cpu.encode(output_tensor_flipped).latent_dist.sample()
+                
+                cond_input_flipped = None
+                model_input_flipped = None
+                if self.use_flipped_versions and input_tensor_flipped is not None:
+                    cond_input_flipped = vae_cpu.encode(input_tensor_flipped).latent_dist.sample()
+                    model_input_flipped = vae_cpu.encode(output_tensor_flipped).latent_dist.sample()
 
             # VAE scale factor
             vae_scale_factor = 2 ** (len(vae_cpu.config.block_out_channels) - 1)
@@ -171,14 +197,16 @@ class EditDataset(Dataset):
                 "vae_scale_factor": vae_scale_factor,
             }, latent_data_path)
 
-            torch.save({
-                "model_input": model_input_flipped.detach().cpu(),
-                "cond_input": cond_input_flipped.detach().cpu(),
-                "prompt_embeds": prompt_embeds.detach().cpu(),
-                "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
-                "text_ids": text_ids.detach().cpu(),
-                "vae_scale_factor": vae_scale_factor,
-            }, latent_data_flipped_path)
+            # TODO: Re-enable flipped versions when disk space is available
+            if self.use_flipped_versions and latent_data_flipped_path is not None and model_input_flipped is not None:
+                torch.save({
+                    "model_input": model_input_flipped.detach().cpu(),
+                    "cond_input": cond_input_flipped.detach().cpu(),
+                    "prompt_embeds": prompt_embeds.detach().cpu(),
+                    "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
+                    "text_ids": text_ids.detach().cpu(),
+                    "vae_scale_factor": vae_scale_factor,
+                }, latent_data_flipped_path)
         finally:
             # Move models back to original device
             self.vae.to(self.device)
@@ -187,29 +215,69 @@ class EditDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.metadata[idx]
-        latent_data_path = (self.data_dir / item["input_image"]).with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
-        latent_data_flipped_path = (self.data_dir / item["input_image"]).with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}_flipped.pt")
-
-        # Randomly choose between original and flipped data if both exist
-        if latent_data_path.exists() and latent_data_flipped_path.exists():
-            chosen_path = random.choice([latent_data_path, latent_data_flipped_path])
-        elif latent_data_path.exists():
-            chosen_path = latent_data_path
-        elif latent_data_flipped_path.exists():
-            chosen_path = latent_data_flipped_path
+        input_image_path = self.data_dir / item["input_image"]
+        
+        # Path for original latent data
+        latent_data_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
+        
+        # Load original latent data
+        if latent_data_path.exists():
+            latent_data = torch.load(latent_data_path)
+            return latent_data
         else:
-            raise FileNotFoundError(f"Neither original nor flipped latent data found for {item['input_image']}")
-
-        data = torch.load(chosen_path, map_location="cpu", weights_only=True)
-
-        return {
-            "model_input": data["model_input"],
-            "cond_input": data["cond_input"],
-            "prompt_embeds": data["prompt_embeds"],
-            "pooled_prompt_embeds": data["pooled_prompt_embeds"],
-            "text_ids": data["text_ids"],
-            "vae_scale_factor": data["vae_scale_factor"],
-        }
+            # If latent data doesn't exist, process it on the fly
+            print(f"Warning: Latent data not found for {input_image_path}, processing on the fly")
+            output_image_path = self.data_dir / item["output_image"]
+            
+            # Process on CPU to save memory
+            device = "cpu"
+            
+            # Load and preprocess images
+            input_image = Image.open(input_image_path).convert("RGB")
+            output_image = Image.open(output_image_path).convert("RGB")
+            
+            # Resize images
+            input_image = input_image.resize((self.width_resize, self.height_resize), Image.LANCZOS)
+            output_image = output_image.resize((self.width_resize, self.height_resize), Image.LANCZOS)
+            
+            # Convert to tensors
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ])
+            
+            input_tensor = transform(input_image).unsqueeze(0).to(device)
+            output_tensor = transform(output_image).unsqueeze(0).to(device)
+            
+            # Encode images to latent space
+            with torch.no_grad():
+                cond_input = self.vae.encode(input_tensor).latent_dist.sample()
+                model_input = self.vae.encode(output_tensor).latent_dist.sample()
+            
+            # VAE scale factor
+            vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
+            
+            # Tokenize prompts
+            tokens_one = tokenize_prompt(self.tokenizer, item["edit_instruction"], max_sequence_length=77)
+            tokens_two = tokenize_prompt(self.tokenizer_2, item["edit_instruction"], max_sequence_length=256)
+            
+            with torch.no_grad():
+                prompt_embeds, pooled_prompt_embeds, text_ids = encode_prompt(
+                    text_encoders=[self.text_encoder, self.text_encoder_2],
+                    tokenizers=[None, None],
+                    text_input_ids_list=[tokens_one, tokens_two],
+                    max_sequence_length=256,
+                    prompt=item["edit_instruction"],
+                )
+            
+            return {
+                "model_input": model_input.detach(),
+                "cond_input": cond_input.detach(),
+                "prompt_embeds": prompt_embeds.detach(),
+                "pooled_prompt_embeds": pooled_prompt_embeds.detach(),
+                "text_ids": text_ids.detach(),
+                "vae_scale_factor": vae_scale_factor,
+            }
 
     def __len__(self):
         return len(self.metadata)

@@ -9,6 +9,10 @@ from omegaconf import OmegaConf
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# Set custom cache directory
+os.environ["HF_HOME"] = "/tmp/huggingface"
+os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface/transformers"
+os.environ["HF_DATASETS_CACHE"] = "/tmp/huggingface/datasets"
 import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
 from pytorch_lightning.strategies import DeepSpeedStrategy
@@ -53,6 +57,25 @@ def main():
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
+    
+    # Clear cache directories to free up space
+    cache_dirs = ["/tmp/huggingface", "/tmp/huggingface/transformers", "/tmp/huggingface/datasets"]
+    for cache_dir in cache_dirs:
+        if os.path.exists(cache_dir):
+            print(f"Clearing cache directory: {cache_dir}")
+            try:
+                shutil.rmtree(cache_dir)
+                os.makedirs(cache_dir, exist_ok=True)
+            except Exception as e:
+                print(f"Warning: Could not clear cache directory {cache_dir}: {e}")
+    
+    # Check available disk space
+    try:
+        disk_space = psutil.disk_usage('/')
+        print(f"Disk space: {disk_space.free / 1e9:.2f} GB free of {disk_space.total / 1e9:.2f} GB")
+    except Exception as e:
+        print(f"Warning: Could not get disk space information: {e}")
+    
     config = load_config(args.config_path)
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
