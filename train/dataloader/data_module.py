@@ -379,8 +379,8 @@ class FLUXDataModule(pl.LightningDataModule):
         models = {}
         model_components = ["vae", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
 
-        # Use workspace cache directory
-        cache_dir = "/workspace/hf_cache"
+        # Use workspace cache directory from environment variable or fallback to default
+        cache_dir = os.environ.get("HF_HOME", "/workspace/hf_cache")
         
         # Ensure the directory exists
         os.makedirs(cache_dir, exist_ok=True)

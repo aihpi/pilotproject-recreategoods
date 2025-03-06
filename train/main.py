@@ -1,3 +1,25 @@
+#!/usr/bin/env python
+# Set environment variables BEFORE any imports
+import os
+import sys
+
+# Set cache directory environment variables BEFORE importing any HF modules
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# Set protobuf implementation to python as a workaround for protobuf version issues
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+# Set custom cache directory
+os.environ["HF_HOME"] = "/workspace/hf_cache"
+os.environ["HF_CACHE_HOME"] = "/workspace/hf_cache"  # Might be used in some versions
+os.environ["TRANSFORMERS_CACHE"] = "/workspace/hf_cache/transformers"
+os.environ["HF_DATASETS_CACHE"] = "/workspace/hf_cache/datasets"
+
+# Create cache directories immediately
+os.makedirs("/workspace/hf_cache", exist_ok=True)
+os.makedirs("/workspace/hf_cache/transformers", exist_ok=True)
+os.makedirs("/workspace/hf_cache/datasets", exist_ok=True)
+
+# Now import the rest of the modules
 from pytorch_lightning import Trainer
 from dataloader.data_module import FLUXDataModule
 from pipelines.train_pipeline_optim import InstructPix2PixModel
@@ -6,26 +28,10 @@ from pytorch_lightning.strategies import FSDPStrategy
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor, Callback
 import argparse
 from omegaconf import OmegaConf
-import os
 import shutil
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-# Set protobuf implementation to python as a workaround for protobuf version issues
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
-# Set custom cache directory
-os.environ["HF_HOME"] = "/workspace/hf_cache"
-os.environ["TRANSFORMERS_CACHE"] = "/workspace/hf_cache/transformers"
-os.environ["HF_DATASETS_CACHE"] = "/workspace/hf_cache/datasets"
-
-# Create cache directories
-os.makedirs("/workspace/hf_cache", exist_ok=True)
-os.makedirs("/workspace/hf_cache/transformers", exist_ok=True)
-os.makedirs("/workspace/hf_cache/datasets", exist_ok=True)
-
 import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
 from pytorch_lightning.strategies import DeepSpeedStrategy
-import shutil
 import psutil
 
 def load_config(config_path: str):
