@@ -64,10 +64,14 @@ class EditDataset(Dataset):
         
         # Process in batches of 10 items
         batch_size = 10
-        for batch_idx in range(0, len(metadata_per_rank), batch_size):
+        # Limit to 10 batches for testing
+        max_batches = 10
+        total_batches = min(max_batches, (len(metadata_per_rank) + batch_size - 1) // batch_size)
+        
+        for batch_idx in range(0, min(max_batches * batch_size, len(metadata_per_rank)), batch_size):
             batch_items = metadata_per_rank[batch_idx:batch_idx + batch_size]
             
-            print(f"Processing batch {batch_idx//batch_size + 1}/{(len(metadata_per_rank) + batch_size - 1)//batch_size}")
+            print(f"Processing batch {batch_idx//batch_size + 1}/{total_batches}")
             
             for item in tqdm(batch_items, desc=f"Rank {current_rank} Precomputing batch {batch_idx//batch_size + 1}"):
                 input_image_path = self.data_dir / item["input_image"]
@@ -91,6 +95,8 @@ class EditDataset(Dataset):
             # Clear cache after each batch to prevent memory buildup
             torch.cuda.empty_cache()
             gc.collect()
+            
+        print(f"Processed {total_batches} batches out of {(len(metadata_per_rank) + batch_size - 1) // batch_size} total batches")
     
     def _process_single_item(self, item, latent_data_path, latent_data_flipped_path):
         # Remove any existing latent data
@@ -330,6 +336,8 @@ class FLUXDataModule(pl.LightningDataModule):
             
             # Process in smaller batches to save memory
             import gc
+            
+            print("TESTING MODE: Using limited dataset (10 batches only)")
             
             # First process validation dataset
             print("Setting up validation dataset...")
