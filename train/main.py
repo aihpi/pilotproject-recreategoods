@@ -361,7 +361,17 @@ def main():
     # Set up the trainer
     logger.info("Setting up trainer")
     
-    if training_config["strategy"] == "deepspeed":
+    # Get training configuration with defaults for missing values
+    # Check both training and model sections for max_epochs
+    max_epochs = training_config.get("max_epochs", config["model"].get("max_epochs", 100))  # Default to 100 epochs
+    devices = training_config.get("gpus", training_config.get("devices", 1))  # Default to 1 device
+    precision = training_config.get("precision", 16)  # Default to 16-bit precision
+    gradient_clip_val = training_config.get("gradient_clip_val", 1.0)  # Default to 1.0
+    accumulate_grad_batches = training_config.get("accumulate_grad_batches", 1)  # Default to 1
+    strategy_name = training_config.get("strategy", "ddp")  # Default to ddp
+    
+    # Map strategy names to actual strategies
+    if strategy_name == "deepspeed" or strategy_name == "deepspeed_stage_2":
         strategy = DeepSpeedStrategy(
             stage=2,
             offload_optimizer=True,
@@ -369,7 +379,15 @@ def main():
             allgather_bucket_size=5e8,
             reduce_bucket_size=5e8,
         )
-    elif training_config["strategy"] == "fsdp":
+    elif strategy_name == "deepspeed_stage_3" or strategy_name == "deepspeed_stage_3_offload":
+        strategy = DeepSpeedStrategy(
+            stage=3,
+            offload_optimizer=True,
+            offload_parameters=True,
+            allgather_bucket_size=5e8,
+            reduce_bucket_size=5e8,
+        )
+    elif strategy_name == "fsdp":
         strategy = FSDPStrategy(
             auto_wrap_policy=None,
             activation_checkpointing=None,
@@ -382,19 +400,26 @@ def main():
     else:
         strategy = "ddp"
     
+    # Map precision strings to actual precision values
+    if precision == "bf16-mixed" or precision == "bf16_mixed":
+        precision = "bf16-mixed"
+    elif precision == "16-mixed" or precision == "16_mixed":
+        precision = "16-mixed"
+    
     logger.info(f"Using strategy: {strategy}")
+    logger.info(f"Training configuration: max_epochs={max_epochs}, devices={devices}, precision={precision}")
     
     trainer = Trainer(
-        max_epochs=training_config["max_epochs"],
+        max_epochs=max_epochs,
         logger=wandb_logger,
         callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor, MemoryMonitorCallback()],
         strategy=strategy,
-        precision=training_config["precision"],
+        precision=precision,
         accelerator="gpu",
-        devices=training_config["devices"],
+        devices=devices,
         log_every_n_steps=10,
-        gradient_clip_val=training_config["gradient_clip_val"],
-        accumulate_grad_batches=training_config["accumulate_grad_batches"],
+        gradient_clip_val=gradient_clip_val,
+        accumulate_grad_batches=accumulate_grad_batches,
     )
     
     logger.info("Trainer set up, about to start training")
