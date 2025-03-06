@@ -379,10 +379,13 @@ class FLUXDataModule(pl.LightningDataModule):
         models = {}
         model_components = ["vae", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
 
-        # Determine which cache directory to use
-        cache_dir = "/tmp/huggingface"
-        if os.path.exists("/workspace/hf_cache"):
-            cache_dir = "/workspace/hf_cache"
+        # Use workspace cache directory
+        cache_dir = "/workspace/hf_cache"
+        
+        # Ensure the directory exists
+        os.makedirs(cache_dir, exist_ok=True)
+        os.makedirs(os.path.join(cache_dir, "transformers"), exist_ok=True)
+        os.makedirs(os.path.join(cache_dir, "datasets"), exist_ok=True)
         
         print(f"Loading models from {ckpt_name} using cache directory: {cache_dir}")
         
@@ -397,7 +400,6 @@ class FLUXDataModule(pl.LightningDataModule):
                 cache_dir=cache_dir,
                 torch_dtype=torch.bfloat16,
                 use_safetensors=True,
-                variant="bf16"
             )
             
             # Extract components from the pipeline
@@ -407,10 +409,10 @@ class FLUXDataModule(pl.LightningDataModule):
             models["text_encoder_2"] = pipe.text_encoder_2
             models["tokenizer_2"] = pipe.tokenizer_2
             
-            print("Successfully loaded model as DiffusionPipeline")
+            print(f"Successfully loaded model {ckpt_name} as DiffusionPipeline")
             
         except Exception as e:
-            print(f"Failed to load as DiffusionPipeline: {e}")
+            print(f"Failed to load {ckpt_name} as DiffusionPipeline: {e}")
             
             # Try loading with FluxPipeline specifically
             try:
@@ -425,7 +427,6 @@ class FLUXDataModule(pl.LightningDataModule):
                         cache_dir=cache_dir,
                         torch_dtype=torch.bfloat16,
                         use_safetensors=True,
-                        variant="bf16"
                     )
                     
                     # Extract components from the pipeline
@@ -435,72 +436,14 @@ class FLUXDataModule(pl.LightningDataModule):
                     models["text_encoder_2"] = pipe.text_encoder_2
                     models["tokenizer_2"] = pipe.tokenizer_2
                     
-                    print("Successfully loaded model as FluxPipeline")
+                    print(f"Successfully loaded model {ckpt_name} as FluxPipeline")
                 except ImportError:
                     print("FluxPipeline not available in this version of diffusers")
                     raise
                     
             except Exception as flux_error:
-                print(f"Failed to load as FluxPipeline: {flux_error}")
-                print("Falling back to loading individual components...")
-                
-                # Fall back to loading individual components
-                for component in model_components:
-                    try:
-                        model_class = {
-                            "vae": AutoencoderKL,
-                            "text_encoder": CLIPTextModel,
-                            "tokenizer": CLIPTokenizer,
-                            "text_encoder_2": T5EncoderModel,
-                            "tokenizer_2": T5Tokenizer,
-                        }[component]
-
-                        # Load each component using the corresponding subfolder and explicit cache_dir
-                        models[component] = model_class.from_pretrained(
-                            ckpt_name, 
-                            subfolder=component,
-                            cache_dir=cache_dir,
-                            use_safetensors=True
-                        )
-                    except Exception as component_error:
-                        print(f"Error loading {component}: {component_error}")
-                        
-                        # Try manual download as a last resort
-                        try:
-                            print(f"Attempting manual download for {component}...")
-                            from huggingface_hub import hf_hub_download
-                            
-                            # Map components to their typical filenames
-                            filename_map = {
-                                "vae": "diffusion_pytorch_model.safetensors",
-                                "text_encoder": "model.safetensors",
-                                "tokenizer": "tokenizer_config.json",
-                                "text_encoder_2": "model.safetensors",
-                                "tokenizer_2": "tokenizer_config.json"
-                            }
-                            
-                            # Create component directory
-                            component_dir = os.path.join(cache_dir, ckpt_name, component)
-                            os.makedirs(component_dir, exist_ok=True)
-                            
-                            # Download the file
-                            file_path = hf_hub_download(
-                                repo_id=ckpt_name,
-                                filename=f"{component}/{filename_map[component]}",
-                                cache_dir=cache_dir
-                            )
-                            
-                            # Try loading again
-                            models[component] = model_class.from_pretrained(
-                                component_dir,
-                                cache_dir=cache_dir,
-                                use_safetensors=True
-                            )
-                            
-                            print(f"Successfully loaded {component} after manual download")
-                        except Exception as download_error:
-                            print(f"Manual download failed for {component}: {download_error}")
-                            raise component_error
+                print(f"Failed to load {ckpt_name} as FluxPipeline: {flux_error}")
+                raise Exception(f"Failed to load model {ckpt_name} with any available pipeline")
         
         return models
     
@@ -509,7 +452,13 @@ class FLUXDataModule(pl.LightningDataModule):
         
         if stage in (None, "fit"):
             # Load models
-            models = self._load_models(self.model_name)
+            try:
+                models = self._load_models(self.model_name)
+            except Exception as e:
+                print(f"ERROR: Failed to load models: {e}")
+                print("This is a critical error. Cannot continue without models.")
+                import sys
+                sys.exit(1)
             
             # Process in smaller batches to save memory
             import gc

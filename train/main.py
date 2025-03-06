@@ -65,19 +65,86 @@ def main():
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
     
-    # Clear cache directories to free up space
-    cache_dirs = ["/tmp/huggingface", "/tmp/huggingface/transformers", "/tmp/huggingface/datasets"]
-    for cache_dir in cache_dirs:
-        if os.path.exists(cache_dir):
-            print(f"Clearing cache directory: {cache_dir}")
-            try:
-                shutil.rmtree(cache_dir)
-                os.makedirs(cache_dir, exist_ok=True)
-            except Exception as e:
-                print(f"Warning: Could not clear cache directory {cache_dir}: {e}")
-    
-    # Check available disk space
+    # Create workspace cache directory
+    workspace_cache = "/workspace/hf_cache"
     try:
+        os.makedirs(workspace_cache, exist_ok=True)
+        os.makedirs(os.path.join(workspace_cache, "transformers"), exist_ok=True)
+        os.makedirs(os.path.join(workspace_cache, "datasets"), exist_ok=True)
+        print(f"Created cache directory: {workspace_cache}")
+        
+        # Set environment variables to use this cache
+        os.environ["HF_HOME"] = workspace_cache
+        os.environ["TRANSFORMERS_CACHE"] = os.path.join(workspace_cache, "transformers")
+        os.environ["HF_DATASETS_CACHE"] = os.path.join(workspace_cache, "datasets")
+        
+        # Upgrade diffusers to the latest version
+        try:
+            print("Upgrading diffusers to the latest version...")
+            os.system("pip install -U diffusers")
+        except Exception as e:
+            print(f"Warning: Could not upgrade diffusers: {e}")
+    except Exception as e:
+        print(f"Warning: Could not create workspace cache directory: {e}")
+    
+    # Aggressively clean up disk space
+    try:
+        # Clear cache directories
+        cache_dirs = [
+            "/tmp/huggingface", 
+            "/tmp/huggingface/transformers", 
+            "/tmp/huggingface/datasets",
+            "/root/.cache/huggingface"
+        ]
+        for cache_dir in cache_dirs:
+            if os.path.exists(cache_dir):
+                print(f"Clearing cache directory: {cache_dir}")
+                try:
+                    shutil.rmtree(cache_dir)
+                    os.makedirs(cache_dir, exist_ok=True)
+                except Exception as e:
+                    print(f"Warning: Could not clear cache directory {cache_dir}: {e}")
+        
+        # Clear other temp directories
+        temp_dirs = ["/tmp", "/var/tmp"]
+        for temp_dir in temp_dirs:
+            if os.path.exists(temp_dir):
+                print(f"Cleaning up {temp_dir}...")
+                try:
+                    # Only remove files older than 1 day
+                    cmd = f"find {temp_dir} -type f -mtime +1 -delete"
+                    os.system(cmd)
+                except Exception as e:
+                    print(f"Warning: Could not clean {temp_dir}: {e}")
+        
+        # Clear pip cache
+        try:
+            os.system("pip cache purge")
+            print("Cleared pip cache")
+        except Exception as e:
+            print(f"Warning: Could not clear pip cache: {e}")
+            
+        # Clear apt cache
+        try:
+            os.system("apt-get clean")
+            print("Cleared apt cache")
+        except Exception as e:
+            print(f"Warning: Could not clear apt cache: {e}")
+            
+        # Remove unnecessary large files
+        large_dirs = [
+            "/var/lib/apt/lists",
+            "/var/cache/apt/archives"
+        ]
+        for large_dir in large_dirs:
+            if os.path.exists(large_dir):
+                print(f"Cleaning up {large_dir}...")
+                try:
+                    os.system(f"rm -rf {large_dir}/*")
+                except Exception as e:
+                    print(f"Warning: Could not clean {large_dir}: {e}")
+        
+        # Check available disk space
         disk_space = psutil.disk_usage('/')
         print(f"Disk space: {disk_space.free / 1e9:.2f} GB free of {disk_space.total / 1e9:.2f} GB")
         
