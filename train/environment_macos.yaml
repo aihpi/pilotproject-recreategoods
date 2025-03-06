@@ -13,6 +13,7 @@ dependencies:
   - pandas
   - tqdm
   - sentencepiece
+  - protobuf=3.20.3  # Specific version to avoid protobuf issues
   
   # PyTorch dependencies for macOS (uses MPS acceleration on Apple Silicon)
   - pytorch::pytorch

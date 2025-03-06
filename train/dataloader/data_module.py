@@ -387,6 +387,9 @@ class FLUXDataModule(pl.LightningDataModule):
         os.makedirs(os.path.join(cache_dir, "transformers"), exist_ok=True)
         os.makedirs(os.path.join(cache_dir, "datasets"), exist_ok=True)
         
+        # Set protobuf implementation to python as a workaround for protobuf version issues
+        os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+        
         print(f"Loading models from {ckpt_name} using cache directory: {cache_dir}")
         
         try:
@@ -443,7 +446,49 @@ class FLUXDataModule(pl.LightningDataModule):
                     
             except Exception as flux_error:
                 print(f"Failed to load {ckpt_name} as FluxPipeline: {flux_error}")
-                raise Exception(f"Failed to load model {ckpt_name} with any available pipeline")
+                
+                # Try loading individual components directly
+                try:
+                    print("Attempting to load individual components directly...")
+                    
+                    # Try to load each component individually
+                    for component in model_components:
+                        try:
+                            model_class = {
+                                "vae": AutoencoderKL,
+                                "text_encoder": CLIPTextModel,
+                                "tokenizer": CLIPTokenizer,
+                                "text_encoder_2": T5EncoderModel,
+                                "tokenizer_2": T5Tokenizer,
+                            }[component]
+                            
+                            # Try loading from the model repository directly
+                            models[component] = model_class.from_pretrained(
+                                ckpt_name,
+                                subfolder=component,
+                                cache_dir=cache_dir,
+                                use_safetensors=True,
+                            )
+                            print(f"Successfully loaded {component}")
+                        except Exception as component_error:
+                            print(f"Failed to load {component}: {component_error}")
+                            
+                            # If it's a tokenizer, try creating a default one
+                            if component == "tokenizer":
+                                from transformers import CLIPTokenizer
+                                models[component] = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+                                print(f"Created default {component}")
+                            elif component == "tokenizer_2":
+                                from transformers import T5Tokenizer
+                                models[component] = T5Tokenizer.from_pretrained("t5-base")
+                                print(f"Created default {component}")
+                            else:
+                                raise component_error
+                    
+                    print("Successfully loaded all components individually")
+                except Exception as individual_error:
+                    print(f"Failed to load individual components: {individual_error}")
+                    raise Exception(f"Failed to load model {ckpt_name} with any available method")
         
         return models
     

@@ -14,6 +14,7 @@ dependencies:
   - pandas
   - tqdm
   - sentencepiece
+  - protobuf=3.20.3  # Specific version to avoid protobuf issues
   
   # PyTorch dependencies - platform specific
   - pytorch::pytorch

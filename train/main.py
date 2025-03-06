@@ -10,6 +10,8 @@ import os
 import shutil
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# Set protobuf implementation to python as a workaround for protobuf version issues
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 # Set custom cache directory
 os.environ["HF_HOME"] = "/tmp/huggingface"
 os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface/transformers"
@@ -77,13 +79,6 @@ def main():
         os.environ["HF_HOME"] = workspace_cache
         os.environ["TRANSFORMERS_CACHE"] = os.path.join(workspace_cache, "transformers")
         os.environ["HF_DATASETS_CACHE"] = os.path.join(workspace_cache, "datasets")
-        
-        # Upgrade diffusers to the latest version
-        try:
-            print("Upgrading diffusers to the latest version...")
-            os.system("pip install -U diffusers")
-        except Exception as e:
-            print(f"Warning: Could not upgrade diffusers: {e}")
     except Exception as e:
         print(f"Warning: Could not create workspace cache directory: {e}")
     
