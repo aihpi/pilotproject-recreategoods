@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Check if conda is installed, if not run the setup script
+if ! command -v conda &> /dev/null; then
+    echo "Conda not found. Running setup script..."
+    bash /workspace/recreategoods/train/runpod_setup.sh
+fi
+
 # Source the setup script if it hasn't been run yet
 if [ ! -d "/workspace/recreategoods" ]; then
     echo "Running setup script..."
@@ -10,9 +16,25 @@ fi
 # Navigate to the repository
 cd /workspace/recreategoods
 
+# Ensure conda is properly initialized
+if [ -f ~/.bashrc ]; then
+    source ~/.bashrc
+fi
+
 # Activate conda environment
-source $(conda info --base)/etc/profile.d/conda.sh
-conda activate train-model
+if [ -d "$(conda info --base)/etc/profile.d" ]; then
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+else
+    export PATH="$(conda info --base)/bin:$PATH"
+fi
+
+conda activate train-model || { echo "Failed to activate conda environment. Creating it..."; conda env create -f train/environment.yaml -n train-model && conda activate train-model; }
+
+# Verify conda environment is activated
+if [[ "$(conda info --envs | grep '*' | awk '{print $1}')" != "train-model" ]]; then
+    echo "Warning: train-model environment is not activated. Attempting to activate again..."
+    conda activate train-model
+fi
 
 # Start disk space monitoring in the background
 echo "Starting disk space monitoring..."
