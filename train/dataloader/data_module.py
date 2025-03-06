@@ -9,8 +9,12 @@ import os
 import random
 import torchvision.transforms.functional as F
 import torch
+import gc
+import resource
+import threading
+import time
 from tqdm import tqdm
-from diffusers import AutoencoderKL
+from diffusers import AutoencoderKL, DiffusionPipeline
 from pipelines.tokenize import tokenize_prompt, encode_prompt
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
 
@@ -536,9 +540,11 @@ class FLUXDataModule(pl.LightningDataModule):
         models = {}
         model_components = ["vae", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
 
-        # Import torch at the beginning of the method
+        # Import all necessary modules at the beginning
         import torch
         import gc
+        from diffusers import AutoencoderKL, DiffusionPipeline
+        from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
         
         # Use workspace cache directory from environment variable or fallback to default
         cache_dir = os.environ.get("HF_HOME", "/workspace/hf_cache")
@@ -559,7 +565,6 @@ class FLUXDataModule(pl.LightningDataModule):
         
         # Close any unnecessary file descriptors before loading models
         try:
-            import resource
             soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
             # Close file descriptors above 100 (to avoid closing important ones)
             for fd in range(100, soft):
@@ -570,27 +575,121 @@ class FLUXDataModule(pl.LightningDataModule):
         except Exception as e:
             print(f"Warning: Could not clean up file descriptors before loading models: {e}")
         
+        # Try loading individual components directly first (most reliable approach)
         try:
-            # Try loading with DiffusionPipeline which can handle various model architectures
-            from diffusers import DiffusionPipeline
+            print("Attempting to load individual components directly...")
             
-            print(f"Attempting to load {ckpt_name} as a DiffusionPipeline...")
+            # Clean up before loading individual components
+            gc.collect()
+            torch.cuda.empty_cache()
             
-            # Load components one by one to better manage memory
-            pipe_kwargs = {
-                "cache_dir": cache_dir,
-                "torch_dtype": torch.bfloat16,
-                "use_safetensors": True,
-                # Load only necessary components to save memory
-                "low_cpu_mem_usage": True,
-                "device_map": "auto",  # Let the library decide optimal device placement
-            }
+            # Try to load each component individually
+            for component in model_components:
+                try:
+                    if component == "vae":
+                        models[component] = AutoencoderKL.from_pretrained(
+                            ckpt_name,
+                            subfolder=component,
+                            cache_dir=cache_dir,
+                            use_safetensors=True,
+                            torch_dtype=torch.float32,  # Use float32 for stability
+                        )
+                    elif component == "text_encoder":
+                        models[component] = CLIPTextModel.from_pretrained(
+                            ckpt_name,
+                            subfolder=component,
+                            cache_dir=cache_dir,
+                            use_safetensors=True,
+                            torch_dtype=torch.float32,
+                        )
+                    elif component == "tokenizer":
+                        models[component] = CLIPTokenizer.from_pretrained(
+                            ckpt_name,
+                            subfolder=component,
+                            cache_dir=cache_dir,
+                        )
+                    elif component == "text_encoder_2":
+                        models[component] = T5EncoderModel.from_pretrained(
+                            ckpt_name,
+                            subfolder=component,
+                            cache_dir=cache_dir,
+                            use_safetensors=True,
+                            torch_dtype=torch.float32,
+                        )
+                    elif component == "tokenizer_2":
+                        models[component] = T5Tokenizer.from_pretrained(
+                            ckpt_name,
+                            subfolder=component,
+                            cache_dir=cache_dir,
+                        )
+                    
+                    print(f"Successfully loaded {component}")
+                    
+                    # Clean up after each component
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    
+                except Exception as component_error:
+                    print(f"Failed to load {component}: {component_error}")
+                    
+                    # If it's a tokenizer, try creating a default one
+                    if component == "tokenizer":
+                        models[component] = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+                        print(f"Created default {component}")
+                    elif component == "tokenizer_2":
+                        models[component] = T5Tokenizer.from_pretrained("t5-base")
+                        print(f"Created default {component}")
+                    else:
+                        # Try loading from the pipeline as a fallback
+                        try:
+                            print(f"Attempting to load {ckpt_name} as a DiffusionPipeline for {component}...")
+                            
+                            # Load the pipeline with minimal components
+                            pipe = DiffusionPipeline.from_pretrained(
+                                ckpt_name,
+                                cache_dir=cache_dir,
+                                torch_dtype=torch.float32,
+                                use_safetensors=True,
+                                low_cpu_mem_usage=True,
+                            )
+                            
+                            # Extract the needed component
+                            if hasattr(pipe, component):
+                                models[component] = getattr(pipe, component)
+                                print(f"Successfully loaded {component} from pipeline")
+                            else:
+                                raise ValueError(f"{component} not found in pipeline")
+                                
+                            # Remove references to the pipeline
+                            del pipe
+                            gc.collect()
+                            torch.cuda.empty_cache()
+                            
+                        except Exception as pipe_error:
+                            print(f"Failed to load {component} from pipeline: {pipe_error}")
+                            raise component_error
             
-            # Use a context manager to ensure resources are properly released
-            import contextlib
-            with contextlib.ExitStack() as stack:
-                # Load the pipeline
-                pipe = DiffusionPipeline.from_pretrained(ckpt_name, **pipe_kwargs)
+            print("Successfully loaded all components individually")
+            
+        except Exception as individual_error:
+            print(f"Failed to load individual components: {individual_error}")
+            
+            # Try loading with DiffusionPipeline as a fallback
+            try:
+                print(f"Attempting to load {ckpt_name} as a DiffusionPipeline...")
+                
+                # Clean up before loading
+                gc.collect()
+                torch.cuda.empty_cache()
+                
+                # Load the pipeline with minimal settings
+                pipe = DiffusionPipeline.from_pretrained(
+                    ckpt_name,
+                    cache_dir=cache_dir,
+                    torch_dtype=torch.float32,
+                    use_safetensors=True,
+                    low_cpu_mem_usage=True,
+                )
                 
                 # Extract components from the pipeline
                 models["vae"] = pipe.vae
@@ -599,110 +698,16 @@ class FLUXDataModule(pl.LightningDataModule):
                 models["text_encoder_2"] = pipe.text_encoder_2
                 models["tokenizer_2"] = pipe.tokenizer_2
                 
-                # Remove references to the pipeline to free memory
+                # Remove references to the pipeline
                 del pipe
-                
-                # Force garbage collection
                 gc.collect()
                 torch.cuda.empty_cache()
                 
                 print(f"Successfully loaded model {ckpt_name} as DiffusionPipeline")
-            
-        except Exception as e:
-            print(f"Failed to load {ckpt_name} as DiffusionPipeline: {e}")
-            
-            # Try loading with FluxPipeline specifically
-            try:
-                print(f"Attempting to load {ckpt_name} as a FluxPipeline...")
-                # First check if FluxPipeline is available
-                try:
-                    from diffusers import FluxPipeline
-                    
-                    # Clean up before loading
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    
-                    pipe = FluxPipeline.from_pretrained(
-                        ckpt_name,
-                        cache_dir=cache_dir,
-                        torch_dtype=torch.bfloat16,
-                        use_safetensors=True,
-                        low_cpu_mem_usage=True,
-                        device_map="auto",
-                    )
-                    
-                    # Extract components from the pipeline
-                    models["vae"] = pipe.vae
-                    models["text_encoder"] = pipe.text_encoder
-                    models["tokenizer"] = pipe.tokenizer
-                    models["text_encoder_2"] = pipe.text_encoder_2
-                    models["tokenizer_2"] = pipe.tokenizer_2
-                    
-                    # Remove references to the pipeline
-                    del pipe
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    
-                    print(f"Successfully loaded model {ckpt_name} as FluxPipeline")
-                except ImportError:
-                    print("FluxPipeline not available in this version of diffusers")
-                    raise
-                    
-            except Exception as flux_error:
-                print(f"Failed to load {ckpt_name} as FluxPipeline: {flux_error}")
                 
-                # Try loading individual components directly
-                try:
-                    print("Attempting to load individual components directly...")
-                    
-                    # Clean up before loading individual components
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    
-                    # Try to load each component individually
-                    for component in model_components:
-                        try:
-                            model_class = {
-                                "vae": AutoencoderKL,
-                                "text_encoder": CLIPTextModel,
-                                "tokenizer": CLIPTokenizer,
-                                "text_encoder_2": T5EncoderModel,
-                                "tokenizer_2": T5Tokenizer,
-                            }[component]
-                            
-                            # Try loading from the model repository directly
-                            models[component] = model_class.from_pretrained(
-                                ckpt_name,
-                                subfolder=component,
-                                cache_dir=cache_dir,
-                                use_safetensors=True,
-                                low_cpu_mem_usage=True if hasattr(model_class, "from_pretrained") else None,
-                            )
-                            print(f"Successfully loaded {component}")
-                            
-                            # Clean up after each component
-                            gc.collect()
-                            torch.cuda.empty_cache()
-                            
-                        except Exception as component_error:
-                            print(f"Failed to load {component}: {component_error}")
-                            
-                            # If it's a tokenizer, try creating a default one
-                            if component == "tokenizer":
-                                from transformers import CLIPTokenizer
-                                models[component] = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-                                print(f"Created default {component}")
-                            elif component == "tokenizer_2":
-                                from transformers import T5Tokenizer
-                                models[component] = T5Tokenizer.from_pretrained("t5-base")
-                                print(f"Created default {component}")
-                            else:
-                                raise component_error
-                    
-                    print("Successfully loaded all components individually")
-                except Exception as individual_error:
-                    print(f"Failed to load individual components: {individual_error}")
-                    raise Exception(f"Failed to load model {ckpt_name} with any available method")
+            except Exception as e:
+                print(f"Failed to load {ckpt_name} as DiffusionPipeline: {e}")
+                raise Exception(f"Failed to load model {ckpt_name} with any available method")
         
         # Final cleanup after loading all models
         gc.collect()
@@ -710,7 +715,6 @@ class FLUXDataModule(pl.LightningDataModule):
         
         # Close any unnecessary file descriptors after loading models
         try:
-            import resource
             soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
             # Close file descriptors above 100 (to avoid closing important ones)
             for fd in range(100, soft):
