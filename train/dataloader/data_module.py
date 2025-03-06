@@ -85,7 +85,7 @@ class EditDataset(Dataset):
                 input_image_path = self.data_dir / item["input_image"]
                 output_image_path = self.data_dir / item["output_image"]
 
-                # Paths for original and augmented data
+                # Paths çfor original and augmented data
                 latent_data_path = input_image_path.with_suffix(f".latent_data_{self.width_resize}_{self.height_resize}.pt")
                 
                 # TODO: Re-enable flipped versions when disk space is available
@@ -501,6 +501,8 @@ class FLUXDataModule(pl.LightningDataModule):
         import torch
         import os
         import resource
+        import threading
+        import time
         
         # Force garbage collection
         gc.collect()
@@ -522,9 +524,6 @@ class FLUXDataModule(pl.LightningDataModule):
             print(f"Warning: Could not clean up file descriptors: {e}")
         
         # Schedule next cleanup
-        import threading
-        import time
-        
         def delayed_cleanup():
             time.sleep(300)  # Run cleanup every 5 minutes
             self.cleanup_resources()
@@ -537,6 +536,10 @@ class FLUXDataModule(pl.LightningDataModule):
         models = {}
         model_components = ["vae", "text_encoder", "tokenizer", "text_encoder_2", "tokenizer_2"]
 
+        # Import torch at the beginning of the method
+        import torch
+        import gc
+        
         # Use workspace cache directory from environment variable or fallback to default
         cache_dir = os.environ.get("HF_HOME", "/workspace/hf_cache")
         
@@ -551,7 +554,6 @@ class FLUXDataModule(pl.LightningDataModule):
         print(f"Loading models from {ckpt_name} using cache directory: {cache_dir}")
         
         # Clean up before loading models
-        import gc
         gc.collect()
         torch.cuda.empty_cache()
         
@@ -571,7 +573,6 @@ class FLUXDataModule(pl.LightningDataModule):
         try:
             # Try loading with DiffusionPipeline which can handle various model architectures
             from diffusers import DiffusionPipeline
-            import torch
             
             print(f"Attempting to load {ckpt_name} as a DiffusionPipeline...")
             
@@ -616,7 +617,6 @@ class FLUXDataModule(pl.LightningDataModule):
                 # First check if FluxPipeline is available
                 try:
                     from diffusers import FluxPipeline
-                    import torch
                     
                     # Clean up before loading
                     gc.collect()
@@ -731,6 +731,7 @@ class FLUXDataModule(pl.LightningDataModule):
             import gc
             import os
             import resource
+            import torch
             
             # Force garbage collection
             gc.collect()
