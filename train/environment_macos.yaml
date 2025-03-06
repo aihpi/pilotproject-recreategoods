@@ -12,6 +12,7 @@ dependencies:
   - matplotlib
   - pandas
   - tqdm
+  - sentencepiece
   
   # PyTorch dependencies for macOS (uses MPS acceleration on Apple Silicon)
   - pytorch::pytorch

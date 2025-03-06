@@ -12,7 +12,7 @@ import torch
 from tqdm import tqdm
 from diffusers import AutoencoderKL
 from pipelines.tokenize import tokenize_prompt, encode_prompt
-from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
+from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
 
 
 
@@ -268,7 +268,7 @@ class FLUXDataModule(pl.LightningDataModule):
                 "text_encoder": CLIPTextModel,
                 "tokenizer": CLIPTokenizer,
                 "text_encoder_2": T5EncoderModel,
-                "tokenizer_2": T5TokenizerFast,
+                "tokenizer_2": T5Tokenizer,
             }[component]
 
             # Load each component using the corresponding subfolder

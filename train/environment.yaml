@@ -13,6 +13,7 @@ dependencies:
   - matplotlib
   - pandas
   - tqdm
+  - sentencepiece
   
   # PyTorch dependencies - platform specific
   - pytorch::pytorch
