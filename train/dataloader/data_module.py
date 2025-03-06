@@ -890,14 +890,50 @@ class FLUXDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         logger = logging.getLogger("FLUXDataModule.train_dataloader")
         logger.info("Creating training dataloader")
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+        
+        # Force garbage collection before creating dataloader
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        return DataLoader(
+            self.train_dataset, 
+            batch_size=self.batch_size, 
+            shuffle=True, 
+            num_workers=min(self.num_workers, 2),  # Limit workers to reduce memory usage
+            pin_memory=False,  # Disable pin_memory to reduce memory usage
+            persistent_workers=False,  # Disable persistent workers to reduce memory usage
+        )
 
     def val_dataloader(self):
         logger = logging.getLogger("FLUXDataModule.val_dataloader")
         logger.info("Creating validation dataloader")
-        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers)
+        
+        # Force garbage collection before creating dataloader
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        return DataLoader(
+            self.val_dataset, 
+            batch_size=self.val_batch_size, 
+            shuffle=False, 
+            num_workers=min(self.num_workers, 2),  # Limit workers to reduce memory usage
+            pin_memory=False,  # Disable pin_memory to reduce memory usage
+            persistent_workers=False,  # Disable persistent workers to reduce memory usage
+        )
 
     def test_dataloader(self):
         logger = logging.getLogger("FLUXDataModule.test_dataloader")
         logger.info("Creating test dataloader")
-        return DataLoader(self.test_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers)
+        
+        # Force garbage collection before creating dataloader
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        return DataLoader(
+            self.test_dataset, 
+            batch_size=self.val_batch_size, 
+            shuffle=False, 
+            num_workers=min(self.num_workers, 2),  # Limit workers to reduce memory usage
+            pin_memory=False,  # Disable pin_memory to reduce memory usage
+            persistent_workers=False,  # Disable persistent workers to reduce memory usage
+        )

@@ -76,16 +76,31 @@ def monitor_resources():
     Monitor system resources and perform cleanup when necessary.
     This function runs in a separate thread.
     """
+    logger = logging.getLogger("ResourceMonitor")
+    
     while True:
         try:
-            # Check memory usage
-            memory = psutil.virtual_memory()
-            if memory.percent > 90:
-                print(f"WARNING: High memory usage detected ({memory.percent}%). Forcing garbage collection.")
-                gc.collect()
+            # Try to free memory before checking usage
+            gc.collect()
+            if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             
-            # Check file descriptor usage
+            # Check memory usage with error handling
+            try:
+                memory = psutil.virtual_memory()
+                if memory.percent > 80:
+                    logger.warning(f"High memory usage detected ({memory.percent}%). Forcing garbage collection.")
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+            except Exception as e:
+                logger.error(f"Error checking memory: {e}")
+                # Try to recover by forcing garbage collection
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            
+            # Check file descriptor usage with error handling
             try:
                 # Count open file descriptors
                 proc = psutil.Process()
@@ -97,23 +112,34 @@ def monitor_resources():
                 # Get current limits
                 soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
                 
-                # If we're using more than 80% of our soft limit, clean up
-                if total_fds > soft * 0.8:
-                    print(f"WARNING: High file descriptor usage detected ({total_fds}/{soft}). Cleaning up.")
+                # If we're using more than 70% of our soft limit, clean up
+                if total_fds > soft * 0.7:
+                    logger.warning(f"High file descriptor usage detected ({total_fds}/{soft}). Cleaning up.")
                     # Close unnecessary file descriptors
-                    for fd in range(3, soft):
+                    for fd in range(100, soft):
                         try:
                             os.close(fd)
                         except:
                             pass
                     gc.collect()
             except Exception as e:
-                print(f"Error checking file descriptors: {e}")
+                logger.error(f"Error checking file descriptors: {e}")
+                # Try to recover by closing some file descriptors anyway
+                try:
+                    for fd in range(100, 1000):
+                        try:
+                            os.close(fd)
+                        except:
+                            pass
+                except:
+                    pass
                 
         except Exception as e:
-            print(f"Error in resource monitoring: {e}")
+            logger.error(f"Error in resource monitoring: {e}")
+            # Sleep for a short time to avoid tight loop in case of persistent errors
+            time.sleep(5)
         
-        # Sleep for 30 seconds
+        # Sleep for 30 seconds before next check
         time.sleep(30)
 
 def load_config(config_path: str):
@@ -149,11 +175,59 @@ class MemoryMonitorCallback(Callback):
             print(f"GPU memory allocated: {allocated:.2f} GB, reserved: {reserved:.2f} GB")
 
 
+def limit_memory_usage():
+    """
+    Apply various techniques to limit memory usage.
+    """
+    logger = logging.getLogger("MemoryLimiter")
+    
+    # Force garbage collection
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    # Try to limit memory usage by closing file descriptors
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        # Close file descriptors above 100 (to avoid closing important ones)
+        for fd in range(100, soft):
+            try:
+                os.close(fd)
+            except:
+                pass
+    except Exception as e:
+        logger.warning(f"Could not close file descriptors: {e}")
+    
+    # Try to limit memory usage by setting PyTorch memory allocator settings
+    if torch.cuda.is_available():
+        try:
+            # Set max split size to limit memory fragmentation
+            torch.cuda.set_per_process_memory_fraction(0.7)  # Use at most 70% of GPU memory
+        except Exception as e:
+            logger.warning(f"Could not set CUDA memory fraction: {e}")
+    
+    # Try to limit CPU memory usage
+    try:
+        import psutil
+        # Set process memory limit
+        process = psutil.Process()
+        # Limit RSS to 80% of total memory
+        total_memory = psutil.virtual_memory().total
+        process.rlimit(psutil.RLIMIT_RSS, (int(total_memory * 0.8), total_memory))
+    except Exception as e:
+        logger.warning(f"Could not set process memory limit: {e}")
+    
+    logger.info("Applied memory usage limits")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
+    
+    # Apply memory limits
+    limit_memory_usage()
     
     # Fix for PyTorch distributed logging errors
     if int(os.environ.get("LOCAL_RANK", 0)) != 0:
@@ -305,13 +379,23 @@ def main():
         image_size=data_config["resize_res"]
     )
 
+    # Add debug logging
+    logger.info("Data module initialized, about to call setup")
+    
+    # Force setup to run now so we can debug it
+    data_module.setup(stage="fit")
+    
+    logger.info("Data module setup completed, about to initialize model")
+    
+    # Limit memory usage before model initialization
+    limit_memory_usage()
+    
     # Initialize your FLUX model 
     model = InstructPix2PixModel(
         args=config["model"],
     )
     
     print(f"Using optimized pipeline: {model.__class__.__module__}")
-    logger = logging.getLogger("main")
     logger.info("Model initialized, about to set up trainer")
     
     # Print GPU memory after model initialization
@@ -408,6 +492,9 @@ def main():
     
     logger.info(f"Using strategy: {strategy}")
     logger.info(f"Training configuration: max_epochs={max_epochs}, devices={devices}, precision={precision}")
+    
+    # Limit memory usage before creating trainer
+    limit_memory_usage()
     
     trainer = Trainer(
         max_epochs=max_epochs,
