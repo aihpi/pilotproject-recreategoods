@@ -13,9 +13,9 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 # Set protobuf implementation to python as a workaround for protobuf version issues
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 # Set custom cache directory
-os.environ["HF_HOME"] = "/tmp/huggingface"
-os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface/transformers"
-os.environ["HF_DATASETS_CACHE"] = "/tmp/huggingface/datasets"
+os.environ["HF_HOME"] = "/workspace/hf_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/workspace/hf_cache/transformers"
+os.environ["HF_DATASETS_CACHE"] = "/workspace/hf_cache/datasets"
 
 # Create cache directories
 os.makedirs("/tmp/huggingface", exist_ok=True)
@@ -67,20 +67,26 @@ def main():
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
     args = parser.parse_args()
     
-    # Create workspace cache directory
+    # Check available disk space
+    disk_space = psutil.disk_usage('/')
+    print(f"Disk space: {disk_space.free / 1e9:.2f} GB free of {disk_space.total / 1e9:.2f} GB")
+    
+    # Also check /tmp disk space
+    tmp_space = psutil.disk_usage('/tmp')
+    print(f"/tmp disk space: {tmp_space.free / 1e9:.2f} GB free of {tmp_space.total / 1e9:.2f} GB")
+    
+    # Always use workspace cache directory
     workspace_cache = "/workspace/hf_cache"
-    try:
-        os.makedirs(workspace_cache, exist_ok=True)
-        os.makedirs(os.path.join(workspace_cache, "transformers"), exist_ok=True)
-        os.makedirs(os.path.join(workspace_cache, "datasets"), exist_ok=True)
-        print(f"Created cache directory: {workspace_cache}")
-        
-        # Set environment variables to use this cache
-        os.environ["HF_HOME"] = workspace_cache
-        os.environ["TRANSFORMERS_CACHE"] = os.path.join(workspace_cache, "transformers")
-        os.environ["HF_DATASETS_CACHE"] = os.path.join(workspace_cache, "datasets")
-    except Exception as e:
-        print(f"Warning: Could not create workspace cache directory: {e}")
+    os.makedirs(workspace_cache, exist_ok=True)
+    os.makedirs(os.path.join(workspace_cache, "transformers"), exist_ok=True)
+    os.makedirs(os.path.join(workspace_cache, "datasets"), exist_ok=True)
+    
+    print(f"Using {workspace_cache} for cache directory")
+    
+    # Update environment variables
+    os.environ["HF_HOME"] = workspace_cache
+    os.environ["TRANSFORMERS_CACHE"] = os.path.join(workspace_cache, "transformers")
+    os.environ["HF_DATASETS_CACHE"] = os.path.join(workspace_cache, "datasets")
     
     # Aggressively clean up disk space
     try:
@@ -146,20 +152,6 @@ def main():
         # Also check /tmp disk space
         tmp_space = psutil.disk_usage('/tmp')
         print(f"/tmp disk space: {tmp_space.free / 1e9:.2f} GB free of {tmp_space.total / 1e9:.2f} GB")
-        
-        # If /tmp has less space than root, use a directory in /workspace
-        if tmp_space.free < disk_space.free:
-            alt_cache_dir = "/workspace/hf_cache"
-            os.makedirs(alt_cache_dir, exist_ok=True)
-            os.makedirs(os.path.join(alt_cache_dir, "transformers"), exist_ok=True)
-            os.makedirs(os.path.join(alt_cache_dir, "datasets"), exist_ok=True)
-            
-            print(f"Using {alt_cache_dir} for cache as root has more free space")
-            
-            # Update environment variables
-            os.environ["HF_HOME"] = alt_cache_dir
-            os.environ["TRANSFORMERS_CACHE"] = os.path.join(alt_cache_dir, "transformers")
-            os.environ["HF_DATASETS_CACHE"] = os.path.join(alt_cache_dir, "datasets")
     except Exception as e:
         print(f"Warning: Could not get disk space information: {e}")
     
