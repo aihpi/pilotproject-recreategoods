@@ -80,11 +80,14 @@ source /workspace/miniconda/etc/profile.d/conda.sh
 conda activate train-model
 
 while true; do
-    DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
-    if [ "$DISK_USAGE" -gt 90 ]; then
-        echo "WARNING: Disk usage is at $DISK_USAGE%. Cleaning up..."
+    # Check disk usage of the workspace filesystem
+    DISK_USAGE=$(df -h /workspace | awk 'NR==2 {print $5}' | sed 's/%//')
+    if [ "$DISK_USAGE" -gt 85 ]; then
+        echo "WARNING: Workspace disk usage is at $DISK_USAGE%. Cleaning up..."
         # Clean up old checkpoints, keeping only the latest 3
-        find /workspace/recreategoods/train/checkpoints -type d -name "epoch=*" | sort | head -n -3 | xargs rm -rf
+        if [ -d "/workspace/recreategoods/train/checkpoints" ]; then
+            find /workspace/recreategoods/train/checkpoints -type d -name "epoch=*" | sort | head -n -3 | xargs rm -rf 2>/dev/null || true
+        fi
     fi
     sleep 300  # Check every 5 minutes
 done

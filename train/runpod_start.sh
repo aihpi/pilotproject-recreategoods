@@ -17,22 +17,18 @@ if [[ "$CONDA_DEFAULT_ENV" != "train-model" ]]; then
     exit 0
 fi
 
-# Start disk space monitoring in the background
-echo "Starting disk space monitoring..."
-python train/disk_management.py --threshold 85 --interval 300 &
-DISK_MONITOR_PID=$!
-
-# Function to clean up on exit
-cleanup() {
-    echo "Cleaning up..."
-    if [ -n "$DISK_MONITOR_PID" ]; then
-        kill $DISK_MONITOR_PID
+# Create a simple disk monitoring function
+monitor_disk_space() {
+    local threshold=85
+    # Check disk usage of the workspace filesystem
+    local disk_usage=$(df -h /workspace | awk 'NR==2 {print $5}' | sed 's/%//')
+    if [ "$disk_usage" -gt "$threshold" ]; then
+        echo "WARNING: Workspace disk usage is at ${disk_usage}%. Consider cleaning up old files."
     fi
-    exit 0
 }
 
-# Set up trap for cleanup
-trap cleanup EXIT INT TERM
+# Run disk space check once
+monitor_disk_space
 
 # Check available GPU memory and adjust batch size if needed
 AVAILABLE_GPU_MEM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{print $1}')
@@ -60,7 +56,7 @@ if [ "$AVAILABLE_GPU_MEM" -lt 8000 ]; then
 fi
 
 # Check for existing checkpoints to resume training
-LATEST_CHECKPOINT=$(find train/checkpoints -name "last.ckpt" -type f | sort -r | head -n 1)
+LATEST_CHECKPOINT=$(find train/checkpoints -name "last.ckpt" -type f 2>/dev/null | sort -r | head -n 1)
 RESUME_ARG=""
 if [ -n "$LATEST_CHECKPOINT" ]; then
     echo "Found checkpoint: $LATEST_CHECKPOINT. Resuming training..."
