@@ -53,6 +53,7 @@ def main():
         val_batch_size=data_config["val_batch_size"],
         num_workers=data_config["num_workers"],
         data_dir=data_config["data_dir"],
+        model_name=config["model"]["name"],
         image_size=data_config["resize_res"]
     )
 
