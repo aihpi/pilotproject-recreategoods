@@ -15,25 +15,10 @@ os.environ["HF_HOME"] = "/tmp/huggingface"
 os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface/transformers"
 os.environ["HF_DATASETS_CACHE"] = "/tmp/huggingface/datasets"
 
-# Force huggingface_hub to use our cache directory
-import huggingface_hub
-huggingface_hub.constants.HF_HUB_CACHE = "/tmp/huggingface"
-huggingface_hub.constants.HUGGINGFACE_HUB_CACHE = "/tmp/huggingface"
-huggingface_hub.constants.TRANSFORMERS_CACHE = "/tmp/huggingface/transformers"
-huggingface_hub.constants.HF_DATASETS_CACHE = "/tmp/huggingface/datasets"
-
-# Monkey patch huggingface_hub's get_cache_dir function
-original_get_cache_dir = huggingface_hub.utils._cache.get_cache_dir
-def patched_get_cache_dir(*args, **kwargs):
-    return "/tmp/huggingface"
-huggingface_hub.utils._cache.get_cache_dir = patched_get_cache_dir
-
-# Also patch the hf_hub_download function to use our cache directory
-original_hf_hub_download = huggingface_hub.hf_hub_download
-def patched_hf_hub_download(repo_id, filename, *args, **kwargs):
-    kwargs["cache_dir"] = "/tmp/huggingface"
-    return original_hf_hub_download(repo_id, filename, *args, **kwargs)
-huggingface_hub.hf_hub_download = patched_hf_hub_download
+# Create cache directories
+os.makedirs("/tmp/huggingface", exist_ok=True)
+os.makedirs("/tmp/huggingface/transformers", exist_ok=True)
+os.makedirs("/tmp/huggingface/datasets", exist_ok=True)
 
 import torch
 from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
@@ -100,34 +85,19 @@ def main():
         tmp_space = psutil.disk_usage('/tmp')
         print(f"/tmp disk space: {tmp_space.free / 1e9:.2f} GB free of {tmp_space.total / 1e9:.2f} GB")
         
-        # If /tmp has more space, use it
-        if tmp_space.free > disk_space.free:
-            print(f"Using /tmp for cache as it has more free space")
-        else:
-            # If root has more space, try to use a directory there
+        # If /tmp has less space than root, use a directory in /workspace
+        if tmp_space.free < disk_space.free:
             alt_cache_dir = "/workspace/hf_cache"
             os.makedirs(alt_cache_dir, exist_ok=True)
-            print(f"Using {alt_cache_dir} for cache as root has more free space")
-            
-            # Update all cache paths
-            huggingface_hub.constants.HF_HUB_CACHE = alt_cache_dir
-            huggingface_hub.constants.HUGGINGFACE_HUB_CACHE = alt_cache_dir
-            huggingface_hub.constants.TRANSFORMERS_CACHE = os.path.join(alt_cache_dir, "transformers")
-            huggingface_hub.constants.HF_DATASETS_CACHE = os.path.join(alt_cache_dir, "datasets")
-            
-            # Update the patched functions
-            def updated_get_cache_dir(*args, **kwargs):
-                return alt_cache_dir
-            huggingface_hub.utils._cache.get_cache_dir = updated_get_cache_dir
-            
-            def updated_hf_hub_download(repo_id, filename, *args, **kwargs):
-                kwargs["cache_dir"] = alt_cache_dir
-                return original_hf_hub_download(repo_id, filename, *args, **kwargs)
-            huggingface_hub.hf_hub_download = updated_hf_hub_download
-            
-            # Create subdirectories
             os.makedirs(os.path.join(alt_cache_dir, "transformers"), exist_ok=True)
             os.makedirs(os.path.join(alt_cache_dir, "datasets"), exist_ok=True)
+            
+            print(f"Using {alt_cache_dir} for cache as root has more free space")
+            
+            # Update environment variables
+            os.environ["HF_HOME"] = alt_cache_dir
+            os.environ["TRANSFORMERS_CACHE"] = os.path.join(alt_cache_dir, "transformers")
+            os.environ["HF_DATASETS_CACHE"] = os.path.join(alt_cache_dir, "datasets")
     except Exception as e:
         print(f"Warning: Could not get disk space information: {e}")
     
