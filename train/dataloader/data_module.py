@@ -469,7 +469,6 @@ class FLUXDataModule(pl.LightningDataModule):
                         try:
                             print(f"Attempting manual download for {component}...")
                             from huggingface_hub import hf_hub_download
-                            import os
                             
                             # Map components to their typical filenames
                             filename_map = {
