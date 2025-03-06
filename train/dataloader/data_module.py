@@ -385,22 +385,123 @@ class FLUXDataModule(pl.LightningDataModule):
             cache_dir = "/workspace/hf_cache"
         
         print(f"Loading models from {ckpt_name} using cache directory: {cache_dir}")
-
-        for component in model_components:
-            model_class = {
-                "vae": AutoencoderKL,
-                "text_encoder": CLIPTextModel,
-                "tokenizer": CLIPTokenizer,
-                "text_encoder_2": T5EncoderModel,
-                "tokenizer_2": T5Tokenizer,
-            }[component]
-
-            # Load each component using the corresponding subfolder and explicit cache_dir
-            models[component] = model_class.from_pretrained(
-                ckpt_name, 
-                subfolder=component,
-                cache_dir=cache_dir
+        
+        try:
+            # Try loading with DiffusionPipeline which can handle various model architectures
+            from diffusers import DiffusionPipeline
+            import torch
+            
+            print(f"Attempting to load {ckpt_name} as a DiffusionPipeline...")
+            pipe = DiffusionPipeline.from_pretrained(
+                ckpt_name,
+                cache_dir=cache_dir,
+                torch_dtype=torch.bfloat16,
+                use_safetensors=True,
+                variant="bf16"
             )
+            
+            # Extract components from the pipeline
+            models["vae"] = pipe.vae
+            models["text_encoder"] = pipe.text_encoder
+            models["tokenizer"] = pipe.tokenizer
+            models["text_encoder_2"] = pipe.text_encoder_2
+            models["tokenizer_2"] = pipe.tokenizer_2
+            
+            print("Successfully loaded model as DiffusionPipeline")
+            
+        except Exception as e:
+            print(f"Failed to load as DiffusionPipeline: {e}")
+            
+            # Try loading with FluxPipeline specifically
+            try:
+                print(f"Attempting to load {ckpt_name} as a FluxPipeline...")
+                # First check if FluxPipeline is available
+                try:
+                    from diffusers import FluxPipeline
+                    import torch
+                    
+                    pipe = FluxPipeline.from_pretrained(
+                        ckpt_name,
+                        cache_dir=cache_dir,
+                        torch_dtype=torch.bfloat16,
+                        use_safetensors=True,
+                        variant="bf16"
+                    )
+                    
+                    # Extract components from the pipeline
+                    models["vae"] = pipe.vae
+                    models["text_encoder"] = pipe.text_encoder
+                    models["tokenizer"] = pipe.tokenizer
+                    models["text_encoder_2"] = pipe.text_encoder_2
+                    models["tokenizer_2"] = pipe.tokenizer_2
+                    
+                    print("Successfully loaded model as FluxPipeline")
+                except ImportError:
+                    print("FluxPipeline not available in this version of diffusers")
+                    raise
+                    
+            except Exception as flux_error:
+                print(f"Failed to load as FluxPipeline: {flux_error}")
+                print("Falling back to loading individual components...")
+                
+                # Fall back to loading individual components
+                for component in model_components:
+                    try:
+                        model_class = {
+                            "vae": AutoencoderKL,
+                            "text_encoder": CLIPTextModel,
+                            "tokenizer": CLIPTokenizer,
+                            "text_encoder_2": T5EncoderModel,
+                            "tokenizer_2": T5Tokenizer,
+                        }[component]
+
+                        # Load each component using the corresponding subfolder and explicit cache_dir
+                        models[component] = model_class.from_pretrained(
+                            ckpt_name, 
+                            subfolder=component,
+                            cache_dir=cache_dir,
+                            use_safetensors=True
+                        )
+                    except Exception as component_error:
+                        print(f"Error loading {component}: {component_error}")
+                        
+                        # Try manual download as a last resort
+                        try:
+                            print(f"Attempting manual download for {component}...")
+                            from huggingface_hub import hf_hub_download
+                            import os
+                            
+                            # Map components to their typical filenames
+                            filename_map = {
+                                "vae": "diffusion_pytorch_model.safetensors",
+                                "text_encoder": "model.safetensors",
+                                "tokenizer": "tokenizer_config.json",
+                                "text_encoder_2": "model.safetensors",
+                                "tokenizer_2": "tokenizer_config.json"
+                            }
+                            
+                            # Create component directory
+                            component_dir = os.path.join(cache_dir, ckpt_name, component)
+                            os.makedirs(component_dir, exist_ok=True)
+                            
+                            # Download the file
+                            file_path = hf_hub_download(
+                                repo_id=ckpt_name,
+                                filename=f"{component}/{filename_map[component]}",
+                                cache_dir=cache_dir
+                            )
+                            
+                            # Try loading again
+                            models[component] = model_class.from_pretrained(
+                                component_dir,
+                                cache_dir=cache_dir,
+                                use_safetensors=True
+                            )
+                            
+                            print(f"Successfully loaded {component} after manual download")
+                        except Exception as download_error:
+                            print(f"Manual download failed for {component}: {download_error}")
+                            raise component_error
         
         return models
     
