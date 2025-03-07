@@ -150,14 +150,14 @@ class EditDataset(Dataset):
             ])
             
             # Process on CPU
-            input_tensor = transform(input_image).unsqueeze(0).to(device)
-            output_tensor = transform(output_image).unsqueeze(0).to(device)
+            input_tensor = transform(input_image).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
+            output_tensor = transform(output_image).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
             
             input_tensor_flipped = None
             output_tensor_flipped = None
             if self.use_flipped_versions and input_image_flipped is not None:
-                input_tensor_flipped = transform(input_image_flipped).unsqueeze(0).to(device)
-                output_tensor_flipped = transform(output_image_flipped).unsqueeze(0).to(device)
+                input_tensor_flipped = transform(input_image_flipped).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
+                output_tensor_flipped = transform(output_image_flipped).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
             
             # Encode images to latent space on CPU
             with torch.no_grad():
@@ -252,16 +252,21 @@ class EditDataset(Dataset):
                 transforms.Normalize([0.5], [0.5]),
             ])
             
-            input_tensor = transform(input_image).unsqueeze(0).to(device)
-            output_tensor = transform(output_image).unsqueeze(0).to(device)
+            input_tensor = transform(input_image).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
+            output_tensor = transform(output_image).unsqueeze(0).to(device=device, dtype=torch.bfloat16)
+            
+            # Move models to CPU for processing
+            vae_cpu = self.vae.to(device)
+            text_encoder_cpu = self.text_encoder.to(device)
+            text_encoder_2_cpu = self.text_encoder_2.to(device)
             
             # Encode images to latent space
             with torch.no_grad():
-                cond_input = self.vae.encode(input_tensor).latent_dist.sample()
-                model_input = self.vae.encode(output_tensor).latent_dist.sample()
+                cond_input = vae_cpu.encode(input_tensor).latent_dist.sample()
+                model_input = vae_cpu.encode(output_tensor).latent_dist.sample()
             
             # VAE scale factor
-            vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
+            vae_scale_factor = 2 ** (len(vae_cpu.config.block_out_channels) - 1)
             
             # Tokenize prompts
             tokens_one = tokenize_prompt(self.tokenizer, item["edit_instruction"], max_sequence_length=77)
@@ -269,7 +274,7 @@ class EditDataset(Dataset):
             
             with torch.no_grad():
                 prompt_embeds, pooled_prompt_embeds, text_ids = encode_prompt(
-                    text_encoders=[self.text_encoder, self.text_encoder_2],
+                    text_encoders=[text_encoder_cpu, text_encoder_2_cpu],
                     tokenizers=[None, None],
                     text_input_ids_list=[tokens_one, tokens_two],
                     max_sequence_length=256,
