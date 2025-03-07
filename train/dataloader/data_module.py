@@ -89,8 +89,53 @@ class EditDataset(Dataset):
             self._precompute_and_save()
 
     def _precompute_and_save(self):
-        current_rank = torch.distributed.get_rank()
-        metadata_per_rank = self.metadata[current_rank::torch.distributed.get_world_size()]
+        # Initialize process group if not already initialized
+        try:
+            if not torch.distributed.is_initialized():
+                logger = logging.getLogger("EditDataset")
+                logger.info("Initializing process group for distributed training")
+                # Initialize with NCCL backend for GPU or GLOO for CPU
+                backend = "nccl" if torch.cuda.is_available() else "gloo"
+                if os.environ.get("RANK") is not None and os.environ.get("WORLD_SIZE") is not None:
+                    torch.distributed.init_process_group(backend=backend)
+                else:
+                    # Initialize with single process if environment variables are not set
+                    torch.distributed.init_process_group(
+                        backend=backend,
+                        init_method="env://",
+                        rank=0,
+                        world_size=1
+                    )
+                logger.info("Process group initialized successfully")
+        except Exception as e:
+            logger = logging.getLogger("EditDataset")
+            logger.warning(f"Could not initialize process group: {e}")
+            # Set up a dummy process group for single-GPU training
+            os.environ["MASTER_ADDR"] = "localhost"
+            os.environ["MASTER_PORT"] = "12355"
+            os.environ["RANK"] = "0"
+            os.environ["WORLD_SIZE"] = "1"
+            os.environ["LOCAL_RANK"] = "0"
+            try:
+                torch.distributed.init_process_group(
+                    backend="gloo",
+                    rank=0,
+                    world_size=1
+                )
+                logger.info("Initialized dummy process group for single-GPU training")
+            except Exception as e2:
+                logger.warning(f"Could not initialize dummy process group: {e2}")
+        
+        # Now get rank and world size
+        try:
+            current_rank = torch.distributed.get_rank()
+            world_size = torch.distributed.get_world_size()
+        except:
+            # Fallback to single process
+            current_rank = 0
+            world_size = 1
+            
+        metadata_per_rank = self.metadata[current_rank::world_size]
         
         # Set up logger for this rank
         logger = logging.getLogger(f"EditDataset_Rank{current_rank}")
@@ -518,8 +563,48 @@ class FLUXDataModule(pl.LightningDataModule):
         self.valid_test_res = valid_test_res
         self.model_name = model_name
 
+        # Initialize process group if needed
+        self._init_process_group()
+        
         # Add a cleanup method that will be called periodically
         self.cleanup_resources()
+    
+    def _init_process_group(self):
+        """Initialize process group for distributed training if not already initialized."""
+        logger = logging.getLogger("FLUXDataModule.init_process_group")
+        
+        try:
+            if not torch.distributed.is_initialized():
+                logger.info("Initializing process group for distributed training")
+                # Initialize with NCCL backend for GPU or GLOO for CPU
+                backend = "nccl" if torch.cuda.is_available() else "gloo"
+                
+                # Check if environment variables are set
+                if os.environ.get("RANK") is not None and os.environ.get("WORLD_SIZE") is not None:
+                    # Use environment variables
+                    torch.distributed.init_process_group(backend=backend)
+                    logger.info(f"Initialized process group with environment variables: RANK={os.environ.get('RANK')}, WORLD_SIZE={os.environ.get('WORLD_SIZE')}")
+                else:
+                    # Set up environment variables for single-GPU training
+                    os.environ["MASTER_ADDR"] = "localhost"
+                    os.environ["MASTER_PORT"] = "12355"
+                    os.environ["RANK"] = "0"
+                    os.environ["WORLD_SIZE"] = "1"
+                    os.environ["LOCAL_RANK"] = "0"
+                    
+                    # Initialize with single process
+                    torch.distributed.init_process_group(
+                        backend=backend,
+                        init_method="env://",
+                        rank=0,
+                        world_size=1
+                    )
+                    logger.info("Initialized process group for single-GPU training")
+            else:
+                logger.info("Process group already initialized")
+        except Exception as e:
+            logger.warning(f"Could not initialize process group: {e}")
+            logger.info("Continuing without distributed training")
     
     def cleanup_resources(self):
         """
