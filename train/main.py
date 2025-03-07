@@ -115,25 +115,6 @@ def patch_huggingface_hub():
 # Now call this function before any imports that might use huggingface_hub
 patch_huggingface_hub()
 
-# Now import the rest of the modules
-from pytorch_lightning import Trainer
-from dataloader.data_module import FLUXDataModule
-from pipelines.train_pipeline_optim import InstructPix2PixModel
-from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.strategies import FSDPStrategy
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor, Callback
-import argparse
-from omegaconf import OmegaConf
-import shutil
-import torch
-from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
-from pytorch_lightning.strategies import DeepSpeedStrategy
-import psutil
-import resource
-import gc
-import threading
-import time
-
 # Set cache directory environment variables BEFORE importing any HF modules
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -145,46 +126,26 @@ os.environ["HF_CACHE_HOME"] = "/workspace/hf_cache"  # Might be used in some ver
 os.environ["TRANSFORMERS_CACHE"] = "/workspace/hf_cache/transformers"
 os.environ["HF_DATASETS_CACHE"] = "/workspace/hf_cache/datasets"
 
-# Force setup to run now so we can debug it
-data_module.setup(stage="fit")
+# Create cache directories immediately
+os.makedirs("/workspace/hf_cache", exist_ok=True)
+os.makedirs("/workspace/hf_cache/transformers", exist_ok=True)
+os.makedirs("/workspace/hf_cache/datasets", exist_ok=True)
 
-logger.info("Data module setup completed, about to initialize model")
-
-# Very aggressive memory cleanup after setup
-logger.info("Performing aggressive memory cleanup after setup")
-
-# Clear all caches
-gc.collect()
-torch.cuda.empty_cache()
-
-# Try to reduce memory usage by closing file descriptors
-try:
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    for fd in range(100, soft):
-        try:
-            os.close(fd)
-        except:
-            pass
-except Exception as e:
-    logger.warning(f"Could not close file descriptors: {e}")
-
-# Try to reduce memory pressure
-try:
-    # Drop caches if possible (Linux only)
-    if os.path.exists("/proc/sys/vm/drop_caches"):
-        os.system("sync && echo 3 > /proc/sys/vm/drop_caches")
-        logger.info("Dropped system caches")
-except Exception as e:
-    logger.warning(f"Could not drop system caches: {e}")
-
-# Run garbage collection multiple times
-for _ in range(5):
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-# Limit memory usage before model initialization
-limit_memory_usage()
+# Now import the rest of the modules
+from pytorch_lightning import Trainer
+from dataloader.data_module import FLUXDataModule
+from pipelines.train_pipeline_optim import InstructPix2PixModel
+from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.strategies import FSDPStrategy
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor, Callback
+import argparse
+from omegaconf import OmegaConf
+import shutil
+from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
+from pytorch_lightning.strategies import DeepSpeedStrategy
+import psutil
+import threading
+import time
 
 def optimize_model_initialization(model_args):
     """
@@ -212,7 +173,7 @@ def optimize_model_initialization(model_args):
         optimized_args["use_gradient_checkpointing"] = True
         logger.info("Enabled gradient checkpointing")
         
-        # Disable attention slicing if available
+        # Enable attention slicing if available
         optimized_args["enable_attention_slicing"] = True
         logger.info("Enabled attention slicing")
         
@@ -222,13 +183,6 @@ def optimize_model_initialization(model_args):
     
     return optimized_args
 
-# Optimize model initialization settings
-optimized_model_args = optimize_model_initialization(config["model"])
-
-# Initialize your FLUX model with optimized settings
-model = InstructPix2PixModel(
-    args=optimized_model_args,
-)
 
 def limit_memory_usage():
     """
@@ -310,6 +264,112 @@ def limit_memory_usage():
             torch.cuda.empty_cache()
     
     logger.info("Applied memory usage limits")
+
+
+def monitor_resources():
+    """
+    Monitor system resources and perform cleanup when necessary.
+    This function runs in a separate thread.
+    """
+    logger = logging.getLogger("ResourceMonitor")
+    
+    while True:
+        try:
+            # Try to free memory before checking usage
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            # Check memory usage with error handling
+            try:
+                memory = psutil.virtual_memory()
+                if memory.percent > 80:
+                    logger.warning(f"High memory usage detected ({memory.percent}%). Forcing garbage collection.")
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+            except Exception as e:
+                logger.error(f"Error checking memory: {e}")
+                # Try to recover by forcing garbage collection
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            
+            # Check file descriptor usage with error handling
+            try:
+                # Count open file descriptors
+                proc = psutil.Process()
+                open_files = proc.open_files()
+                # Use net_connections() instead of connections() to avoid deprecation warning
+                open_connections = proc.net_connections()
+                total_fds = len(open_files) + len(open_connections)
+                
+                # Get current limits
+                soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+                
+                # If we're using more than 70% of our soft limit, clean up
+                if total_fds > soft * 0.7:
+                    logger.warning(f"High file descriptor usage detected ({total_fds}/{soft}). Cleaning up.")
+                    # Close unnecessary file descriptors
+                    for fd in range(100, soft):
+                        try:
+                            os.close(fd)
+                        except:
+                            pass
+                    gc.collect()
+            except Exception as e:
+                logger.error(f"Error checking file descriptors: {e}")
+                # Try to recover by closing some file descriptors anyway
+                try:
+                    for fd in range(100, 1000):
+                        try:
+                            os.close(fd)
+                        except:
+                            pass
+                except:
+                    pass
+                
+        except Exception as e:
+            logger.error(f"Error in resource monitoring: {e}")
+            # Sleep for a short time to avoid tight loop in case of persistent errors
+            time.sleep(5)
+        
+        # Sleep for 30 seconds before next check
+        time.sleep(30)
+
+
+def load_config(config_path: str):
+    """
+    Load the YAML configuration file and return a dictionary.
+    If the file cannot be loaded, an exception is raised.
+    """
+    try:
+        return OmegaConf.load(config_path)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Configuration file not found at: {config_path}")
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred while loading the config file: {e}")
+
+
+# Add a memory monitoring callback
+class MemoryMonitorCallback(Callback):
+    def __init__(self, rank=0):
+        super().__init__()
+        self.rank = rank
+    
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if batch_idx % 10 == 0 and trainer.global_rank == self.rank:  # Log every 10 batches
+            allocated = torch.cuda.memory_allocated() / 1e9
+            reserved = torch.cuda.memory_reserved() / 1e9
+            print(f"Batch {batch_idx}: GPU memory allocated: {allocated:.2f} GB, reserved: {reserved:.2f} GB")
+            
+    def on_validation_start(self, trainer, pl_module):
+        if trainer.global_rank == self.rank:
+            print("\nGPU memory at validation start:")
+            allocated = torch.cuda.memory_allocated() / 1e9
+            reserved = torch.cuda.memory_reserved() / 1e9
+            print(f"GPU memory allocated: {allocated:.2f} GB, reserved: {reserved:.2f} GB")
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -484,7 +544,7 @@ def main():
     data_module.setup(stage="fit")
     
     logger.info("Data module setup completed, about to initialize model")
-
+    
     # Very aggressive memory cleanup after setup
     logger.info("Performing aggressive memory cleanup after setup")
     
