@@ -28,9 +28,13 @@ from peft import LoraConfig
 
 
 def _prepare_latent_image_ids(batch_size, height, width, device, dtype):
-    latent_image_ids = torch.zeros(height, width, 3)
-    latent_image_ids[..., 1] = latent_image_ids[..., 1] + torch.arange(height)[:, None]
-    latent_image_ids[..., 2] = latent_image_ids[..., 2] + torch.arange(width)[None, :]
+    # Create tensors with the specified dtype from the beginning
+    latent_image_ids = torch.zeros(height, width, 3, dtype=dtype)
+    height_range = torch.arange(height, dtype=dtype)[:, None]
+    width_range = torch.arange(width, dtype=dtype)[None, :]
+    
+    latent_image_ids[..., 1] = latent_image_ids[..., 1] + height_range
+    latent_image_ids[..., 2] = latent_image_ids[..., 2] + width_range
 
     latent_image_id_height, latent_image_id_width, latent_image_id_channels = latent_image_ids.shape
 
@@ -108,6 +112,7 @@ class InstructPix2PixModel(pl.LightningModule):
         self.transformer = transformer.train()
         self.transformer.gradient_checkpointing = True
 
+        # Move models to appropriate devices and set data types
         self.vae = models["vae"].to("cpu")
         self.text_encoder = models["text_encoder"].to("cpu")
         self.text_encoder_2 = models["text_encoder_2"].to("cpu")
@@ -117,34 +122,13 @@ class InstructPix2PixModel(pl.LightningModule):
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
         self.text_encoder_2.requires_grad_(False)
-        # target_modules = [
-        #     "attn.to_k",
-        #     "attn.to_q",
-        #     "attn.to_v",
-        #     "attn.to_out.0",
-        #     "attn.add_k_proj",
-        #     "attn.add_q_proj",
-        #     "attn.add_v_proj",
-        #     "attn.to_add_out",
-        #     "ff.net.0.proj",
-        #     "ff.net.2",
-        #     "ff_context.net.0.proj",
-        #     "ff_context.net.2",
-        # ]
-        # lora_rank = 32
-        # transformer_lora_config = LoraConfig(
-        #     r=lora_rank,
-        #     lora_alpha=lora_rank,
-        #     init_lora_weights="gaussian",
-        #     target_modules=target_modules,
-        # )
-        # transformer.x_embedder.requires_grad_(True)
-        # self.transformer.add_adapter(transformer_lora_config)
-        # self.transformer_lora_parameters = list(filter(lambda p: p.requires_grad, self.transformer.parameters()))
-         # Initialize the FluxImg2ImgPipeline
+        
+        # Initialize the LPIPS function with float32 data type
         with torch.no_grad():
             self.lpips_fn = lpips.LPIPS(net='alex')
             self.lpips_fn.net.requires_grad_(False)
+            # Ensure LPIPS model is in float32 as it may not support bfloat16
+            self.lpips_fn = self.lpips_fn.to(dtype=torch.float32)
         
        
     def get_sigmas(self,timesteps, n_dim=4, dtype=torch.float32):
@@ -161,11 +145,11 @@ class InstructPix2PixModel(pl.LightningModule):
 
     def forward(self, batch):
         # Extract batch data
-        model_input = batch["model_input"]
-        cond_input = batch["cond_input"]
-        prompt_embeds = batch["prompt_embeds"]
-        pooled_prompt_embeds = batch["pooled_prompt_embeds"]
-        text_ids = batch["text_ids"][0]
+        model_input = batch["model_input"].to(dtype=self.weight_dtype, device=self.device)
+        cond_input = batch["cond_input"].to(dtype=self.weight_dtype, device=self.device)
+        prompt_embeds = batch["prompt_embeds"].to(dtype=self.weight_dtype, device=self.device)
+        pooled_prompt_embeds = batch["pooled_prompt_embeds"].to(dtype=self.weight_dtype, device=self.device)
+        text_ids = batch["text_ids"][0].to(device=self.device)
         vae_scale_factor = batch["vae_scale_factor"][0].item()
 
         noise = torch.randn_like(model_input)
@@ -250,8 +234,20 @@ class InstructPix2PixModel(pl.LightningModule):
         return loss
     
     def _get_lpips_mean(self, gen_images, gt_images):
+        # Ensure both inputs are the same dtype
+        gen_images = gen_images.to(dtype=self.weight_dtype)
+        gt_images = gt_images.to(dtype=self.weight_dtype)
+        
         gen_images_lpips = 2.0 * gen_images - 1.0
         gt_images_lpips = 2.0 * gt_images - 1.0
+        
+        # Convert to float32 for LPIPS calculation as it may not support bfloat16
+        gen_images_lpips = gen_images_lpips.to(dtype=torch.float32)
+        gt_images_lpips = gt_images_lpips.to(dtype=torch.float32)
+        
+        # Ensure the LPIPS model is also in float32
+        self.lpips_fn = self.lpips_fn.to(dtype=torch.float32)
+        
         lpips_values = self.lpips_fn.forward(gen_images_lpips, gt_images_lpips)
         lpips_mean = lpips_values.mean()
         return lpips_mean
@@ -296,7 +292,8 @@ class InstructPix2PixModel(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
-            in_pixel_values = batch["input_image"].to(dtype=self.vae.dtype)
+            # Ensure consistent data types by explicitly converting to the weight_dtype
+            in_pixel_values = batch["input_image"].to(dtype=self.weight_dtype, device=self.device)
             prompts = batch["edit_instruction"]
             strength = 1
             generated_output = self.pipeline(
@@ -312,8 +309,8 @@ class InstructPix2PixModel(pl.LightningModule):
                 output_type="pt",
             ).images
 
-            gt_images = batch["output_image"].to(dtype=torch.bfloat16, device=generated_output.device)
-            gen_images = generated_output.to(dtype=torch.bfloat16, device=generated_output.device)
+            gt_images = batch["output_image"].to(dtype=self.weight_dtype, device=generated_output.device)
+            gen_images = generated_output.to(dtype=self.weight_dtype, device=generated_output.device)
             lpips_mean = self._get_lpips_mean(gen_images, gt_images)
             self.log("val_lpips", lpips_mean, on_step=False, on_epoch=True, sync_dist=True, batch_size=in_pixel_values.shape[0])
 

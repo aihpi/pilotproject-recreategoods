@@ -189,22 +189,22 @@ class EditDataset(Dataset):
 
             # Save processed data
             torch.save({
-                "model_input": model_input.detach().cpu(),
-                "cond_input": cond_input.detach().cpu(),
-                "prompt_embeds": prompt_embeds.detach().cpu(),
-                "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
-                "text_ids": text_ids.detach().cpu(),
+                "model_input": model_input.detach().cpu().to(dtype=torch.bfloat16),
+                "cond_input": cond_input.detach().cpu().to(dtype=torch.bfloat16),
+                "prompt_embeds": prompt_embeds.detach().cpu().to(dtype=torch.bfloat16),
+                "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu().to(dtype=torch.bfloat16),
+                "text_ids": text_ids.detach().cpu(),  # Keep as int64 for token IDs
                 "vae_scale_factor": vae_scale_factor,
             }, latent_data_path)
 
             # TODO: Re-enable flipped versions when disk space is available
             if self.use_flipped_versions and latent_data_flipped_path is not None and model_input_flipped is not None:
                 torch.save({
-                    "model_input": model_input_flipped.detach().cpu(),
-                    "cond_input": cond_input_flipped.detach().cpu(),
-                    "prompt_embeds": prompt_embeds.detach().cpu(),
-                    "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu(),
-                    "text_ids": text_ids.detach().cpu(),
+                    "model_input": model_input_flipped.detach().cpu().to(dtype=torch.bfloat16),
+                    "cond_input": cond_input_flipped.detach().cpu().to(dtype=torch.bfloat16),
+                    "prompt_embeds": prompt_embeds.detach().cpu().to(dtype=torch.bfloat16),
+                    "pooled_prompt_embeds": pooled_prompt_embeds.detach().cpu().to(dtype=torch.bfloat16),
+                    "text_ids": text_ids.detach().cpu(),  # Keep as int64 for token IDs
                     "vae_scale_factor": vae_scale_factor,
                 }, latent_data_flipped_path)
         finally:
@@ -223,6 +223,12 @@ class EditDataset(Dataset):
         # Load original latent data
         if latent_data_path.exists():
             latent_data = torch.load(latent_data_path)
+            # Ensure all tensors have consistent data types
+            for key in latent_data:
+                if isinstance(latent_data[key], torch.Tensor):
+                    # Keep vae_scale_factor as is since it's a scalar
+                    if key != "vae_scale_factor":
+                        latent_data[key] = latent_data[key].to(dtype=torch.bfloat16)
             return latent_data
         else:
             # If latent data doesn't exist, process it on the fly
@@ -270,12 +276,13 @@ class EditDataset(Dataset):
                     prompt=item["edit_instruction"],
                 )
             
+            # Ensure consistent data types
             return {
-                "model_input": model_input.detach(),
-                "cond_input": cond_input.detach(),
-                "prompt_embeds": prompt_embeds.detach(),
-                "pooled_prompt_embeds": pooled_prompt_embeds.detach(),
-                "text_ids": text_ids.detach(),
+                "model_input": model_input.detach().to(dtype=torch.bfloat16),
+                "cond_input": cond_input.detach().to(dtype=torch.bfloat16),
+                "prompt_embeds": prompt_embeds.detach().to(dtype=torch.bfloat16),
+                "pooled_prompt_embeds": pooled_prompt_embeds.detach().to(dtype=torch.bfloat16),
+                "text_ids": text_ids.detach(),  # Keep as int64 for token IDs
                 "vae_scale_factor": vae_scale_factor,
             }
 
@@ -344,9 +351,10 @@ class EditDatasetVal(Dataset):
 
         edit_instruction = item["edit_instruction"]
 
+        # Ensure consistent data types
         return {
-            "input_image": input_image,
-            "output_image": output_image,
+            "input_image": input_image.to(dtype=torch.bfloat16),
+            "output_image": output_image.to(dtype=torch.bfloat16),
             "edit_instruction": edit_instruction,
         }
     
