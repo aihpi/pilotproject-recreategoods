@@ -23,4 +23,5 @@ dependencies:
     - invisible-watermark
     - sentencepiece
     - accelerate
+    - diffusers
     - -e ../pix2pix/flux 

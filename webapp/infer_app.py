@@ -13,6 +13,12 @@ from io import BytesIO
 import re
 from glob import iglob
 import torch
+
+# Workaround for Streamlit/Torch issue: https://discuss.streamlit.io/t/message-error-about-torch/90886
+# and https://github.com/VikParuchuri/marker/issues/442
+if hasattr(torch, 'classes') and hasattr(torch.classes, '__path__'):
+    torch.classes.__path__ = []
+
 from einops import rearrange
 from fire import Fire
 from torchvision import transforms
