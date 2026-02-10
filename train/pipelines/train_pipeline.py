@@ -14,7 +14,7 @@ from deepspeed.ops.adam import FusedAdam
 from diffusers import FluxTransformer2DModel, AutoencoderKL, FlowMatchEulerDiscreteScheduler
 import numpy as np
 from diffusers.training_utils import compute_density_for_timestep_sampling, compute_loss_weighting_for_sd3
-from pipelines.tokenize import tokenize_prompt, encode_prompt
+from pipelines.tokenize_prompts import tokenize_prompt, encode_prompt
 from diffusers.utils.torch_utils import randn_tensor
 from deepspeed.ops.adam import DeepSpeedCPUAdam
 from pipelines.inference_pipeline import FluxPix2PixPipeline

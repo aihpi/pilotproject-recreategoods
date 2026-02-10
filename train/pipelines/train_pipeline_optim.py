@@ -24,7 +24,6 @@ import torch.distributed as dist
 # from peft import LoraConfig, set_peft_model_state_dict
 # from peft.utils import get_peft_model_state_dict
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
-from peft import LoraConfig
 
 
 def _prepare_latent_image_ids(batch_size, height, width, device, dtype):
@@ -225,7 +224,7 @@ class InstructPix2PixModel(pl.LightningModule):
         )
         # these weighting schemes use a uniform timestep sampling
         # and instead post-weight the loss
-        weighting = compute_loss_weighting_for_sd3(weighting_scheme=None, sigmas=sigmas)
+        weighting = compute_loss_weighting_for_sd3(weighting_scheme="sigma_sqrt", sigmas=sigmas)
         target = noise - model_input
         return model_pred, target, weighting
         

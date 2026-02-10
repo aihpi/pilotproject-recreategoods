@@ -1,6 +1,21 @@
 *.jpg
 *.pt
-
+*.png
+*.json
+qwen-image-edit-finetune/data
+qwen-image-edit-finetune/human-eval
+qwen-image-edit-finetune/human-eval-new
+qwen-image-edit-finetune/validation_outputs
+qwen-image-edit-finetune/wandb
+pix2pix/
+*.safetensors
+*.out
+*.err
+*.txt
+*.parquet
+.venv
+segmentation/*
+qwen-image-edit/
 *.jsonl
 train/wandb
 dataset_generation/ViT-L-14.pt
@@ -178,3 +193,5 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+train/dataset/data/test/*.parquet
+train/deepspeed_checkpoints/*

@@ -107,8 +107,8 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
         generator,
         latents=None,
     ):
-        height = 2 * (int(height) // self.vae_scale_factor)
-        width = 2 * (int(width) // self.vae_scale_factor)
+        height = 2 * (int(height) // (self.vae_scale_factor * 2))
+        width = 2 * (int(width) // (self.vae_scale_factor * 2))
 
         shape = (batch_size, num_channels_latents, height, width)
         
@@ -125,7 +125,7 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
         latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
         latents = self._pack_latents(latents, batch_size, num_channels_latents, height, width)
 
-        latent_image_ids = self._prepare_latent_image_ids(batch_size, height, width, device, dtype)
+        latent_image_ids = self._prepare_latent_image_ids(batch_size, height // 2, width // 2, device, dtype)
 
         return latents, latent_image_ids
     
@@ -140,12 +140,13 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
         device,
         generator,
     ):
-        height = 2 * (int(height) // self.vae_scale_factor)
-        width = 2 * (int(width) // self.vae_scale_factor)
+        height = 2 * (int(height) // (self.vae_scale_factor * 2))
+        width = 2 * (int(width) // (self.vae_scale_factor * 2))
 
         image = image.to(device=device, dtype=dtype)
+        print("IMAGE", image.shape)
         image_latents = retrieve_latents(encoder_output=self.vae.encode(image), generator=generator, sample_mode="sample")
-
+        print("IMAGE LATENTS", image_latents.shape)
         if isinstance(generator, list) and len(generator) != batch_size:
             raise ValueError(
                 f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
@@ -285,7 +286,6 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
         # 2. Preprocess image
         init_image = self.image_processor.preprocess(image, height=height, width=width)
         init_image = init_image.to(dtype=torch.float32)
-
         # 3. Define call parameters
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
@@ -341,7 +341,7 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
             )
 
         # 5. Prepare latent variables
-        num_channels_latents = self.transformer.config.in_channels // 4
+        num_channels_latents = self.transformer.config.in_channels // 8
         
         latents, latent_image_ids = self.prepare_latents(
             batch_size * num_images_per_prompt,
@@ -363,7 +363,6 @@ class FluxPix2PixPipeline(FluxImg2ImgPipeline):
             device,
             generator,
         )
-        
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
         self._num_timesteps = len(timesteps)
 

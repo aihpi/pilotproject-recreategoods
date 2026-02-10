@@ -1,0 +1,71 @@
+# Qwen Image Curriculum Training Configuration
+# This file defines all parameters for curriculum-based fine-tuning
+
+# Dataset Configuration
+dataset:
+  base_path: ""  # Required: Base path of the dataset
+  metadata_path: null  # Path to the metadata file of the dataset
+  max_pixels: 1048576  # 1024*1024 - Maximum number of pixels per frame
+  height: null  # Height of images (null for dynamic resolution)
+  width: null   # Width of images (null for dynamic resolution)
+  data_file_keys: "image"  # Data file keys in metadata (comma-separated)
+  repeat: 1  # Number of times to repeat dataset per epoch
+  num_workers: 0  # Number of workers for data loading
+
+# Model Configuration
+model:
+  paths: null  # Model paths in JSON format
+  id_with_origin_paths: null  # Model ID with origin paths
+  tokenizer_path: null  # Path to tokenizer
+  processor_path: null  # Path to processor for image editing
+  trainable_models: null  # Models to train (e.g., "dit,vae,text_encoder")
+
+# LoRA Configuration
+lora:
+  base_model: null  # Which model LoRA is added to
+  target_modules: "q,k,v,o,ffn.0,ffn.2"  # Layers LoRA is added to
+  rank: 32  # LoRA rank
+  checkpoint: null  # Path to LoRA checkpoint to resume from
+
+# Training Configuration
+training:
+  learning_rate: 0.0001  # 1e-4
+  num_epochs: 1
+  weight_decay: 0.01
+  gradient_accumulation_steps: 1
+  use_gradient_checkpointing: false
+  use_gradient_checkpointing_offload: false
+  find_unused_parameters: false
+  enable_fp8_training: false
+  task: "sft"  # Task type
+  extra_inputs: null  # Additional model inputs (comma-separated)
+
+# Output Configuration
+output:
+  path: "./models"  # Output save path
+  remove_prefix_in_ckpt: "pipe.dit."  # Prefix to remove in checkpoint
+  save_steps: null  # Checkpoint saving intervals (null = every epoch)
+
+# Curriculum Learning Configuration
+curriculum:
+  ranking_csv: null  # Required: Path to ranking CSV with tier information
+  schedule: "50:1.0,0.0,0.0,0.0;50:0.8,0.2,0.0,0.0;50:0.8,0.0,0.2,0.0;50:0.8,0.0,0.0,0.2"
+  batch_size: 32
+  steps_per_epoch: 0  # 0 = auto-calculate
+  sort_within_tier: false
+  seed: 42
+  max_epochs_per_phase: 10  # Maximum epochs per phase before forced transition
+
+# Early Stopping Configuration
+early_stopping:
+  patience: 5  # Early stopping patience for curriculum stages
+  threshold: 0.01  # Early stopping threshold
+
+# Validation Configuration
+validation:
+  csv_path: null  # Path to validation CSV for LPIPS-based early stopping
+  steps: null  # Steps between validation evaluations (null = auto)
+  patience: 3  # Validation patience for curriculum phase early stopping
+  min_delta: 0.001  # Minimum LPIPS improvement required
+  batch_size: 4  # Batch size for validation evaluation
+  samples: 50  # Number of validation samples to evaluate each time

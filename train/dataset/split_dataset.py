@@ -31,7 +31,7 @@ class ImageEditDataset:
             seeds = json.load(f)
 
         samples = {}
-        for class_name, class_seeds in seeds:
+        for class_name, class_seeds, status in seeds:
             prompt_file = self.dataset_dir / class_name / "prompt.json"
             if not prompt_file.exists():
                 continue
@@ -41,10 +41,16 @@ class ImageEditDataset:
                 prompt_data = json.load(pf)
 
             class_samples = []
-            for seed in class_seeds:
+            for i, seed in enumerate(class_seeds):
                 # Prepare paths for input (_0) and output (_1) images
                 input_image_path = self.dataset_dir / class_name / f"{seed}_0.jpg"
                 output_image_path = self.dataset_dir / class_name / f"{seed}_1.jpg"
+                if status[i] == 'removed':
+                    removed_images_folder = "removed_images"
+                    input_image_path = self.dataset_dir / class_name / removed_images_folder / f"{seed}_0.jpg"
+                    output_image_path = self.dataset_dir / class_name / removed_images_folder / f"{seed}_1.jpg"
+
+                    
 
                 if input_image_path.exists() and output_image_path.exists():
                     class_samples.append({
@@ -54,6 +60,7 @@ class ImageEditDataset:
                         "edit_instruction": prompt_data["prompt"]["edit_instruction"],
                         "resulting_caption": prompt_data["prompt"]["resulting_caption"],
                         "class_name": class_name,
+                        "status": status[i],
                     })
             if class_samples:
                 samples[class_name] = class_samples
@@ -149,6 +156,7 @@ def copy_sample(sample, class_dir):
         "edit_instruction": sample["edit_instruction"],
         "resulting_caption": sample["resulting_caption"],
         "class_name": class_dir.name,
+        "status": sample["status"],
     }
 
 def save_split_datasets_to_folders(dataset, splits, output_dir):
@@ -164,7 +172,6 @@ def save_split_datasets_to_folders(dataset, splits, output_dir):
         None
     """
     output_dir = Path(output_dir)
-
     for split_name, class_names in tqdm(splits.items(), desc="Processing Splits"):
         split_dir = output_dir / split_name
         split_dir.mkdir(parents=True, exist_ok=True)
@@ -174,21 +181,24 @@ def save_split_datasets_to_folders(dataset, splits, output_dir):
 
         # Use ThreadPoolExecutor for parallel file copying
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            
             for class_name in tqdm(class_names, desc=f"Processing {split_name} Classes", leave=False):
                 class_samples = dataset.get_samples_for_class(class_name)
                 class_dir = split_dir / class_name
                 class_dir.mkdir(parents=True, exist_ok=True)
-
+                
                 for sample in class_samples:
                     # Submit the file copying task
                     futures.append(executor.submit(copy_sample, sample, class_dir))
 
             # Collect results as they complete
             for future in tqdm(as_completed(futures), desc="Saving Metadata", total=len(futures), leave=False):
-                metadata.append(future.result())
+                result = future.result()
+                if isinstance(result, dict):
+                    metadata.append(result)
 
-        # Save metadata to JSON
-        with open(split_dir / f"{split_name}_metadata.json", "w") as f:
+        # Save metadata to jsonl
+        with open(split_dir / f"{split_name}_metadata.jsonl", "w") as f:
             json.dump(metadata, f, indent=4)
 
 

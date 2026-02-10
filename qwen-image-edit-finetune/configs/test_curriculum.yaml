@@ -1,0 +1,71 @@
+# Test Curriculum Training Configuration (5 GPUs)
+# Based on the parameters from test_curriculum.sbatch - first training run
+
+# Dataset Configuration
+dataset:
+  base_path: "data/example_image_dataset"
+  metadata_path: null
+  max_pixels: 1048576  # 1024*1024
+  height: null  # Dynamic resolution
+  width: null   # Dynamic resolution
+  data_file_keys: "image,edit_image"
+  repeat: 1
+  num_workers: 4
+
+# Model Configuration
+model:
+  paths: null
+  id_with_origin_paths: "Qwen/Qwen-Image-Edit:transformer/diffusion_pytorch_model*.safetensors,Qwen/Qwen-Image:text_encoder/model*.safetensors,Qwen/Qwen-Image:vae/diffusion_pytorch_model.safetensors"
+  tokenizer_path: null
+  processor_path: null
+  trainable_models: "dit"
+
+# LoRA Configuration
+lora:
+  base_model: "dit"
+  target_modules: "to_q,to_k,to_v,add_q_proj,add_k_proj,add_v_proj,to_out.0,to_add_out,img_mlp.net.2,img_mod.1,txt_mlp.net.2,txt_mod.1"
+  rank: 16
+  checkpoint: null
+
+# Training Configuration
+training:
+  learning_rate: 0.00005  # 5e-5
+  num_epochs: 15
+  weight_decay: 0.01
+  gradient_accumulation_steps: 4
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: false
+  find_unused_parameters: true
+  enable_fp8_training: false
+  task: "sft"
+  extra_inputs: "edit_image"
+
+# Output Configuration
+output:
+  path: "./models/test_curriculum/Qwen-Image-Edit_adaptive_curriculum_test"
+  remove_prefix_in_ckpt: "pipe.dit."
+  save_steps: 640
+
+# Curriculum Learning Configuration
+curriculum:
+  ranking_csv: "data/edit_ranking_out/ranking_dinov2_vitb14_tiers4.csv"
+  schedule: "5:1.0,0.0,0.0,0.0;5:0.8,0.2,0.0,0.0;5:0.7,0.2,0.1,0.0;5:0.6,0.2,0.1,0.1"
+  batch_size: 1
+  steps_per_epoch: 6400
+  sort_within_tier: false
+  seed: 42
+  max_epochs_per_phase: 4
+
+# Early Stopping Configuration
+early_stopping:
+  patience: 3
+  threshold: 0.005
+
+# Validation Configuration
+validation:
+  csv_path: "data/example_image_dataset/validation.csv"
+  steps: 800  # Validation every 800 steps
+  patience: 2
+  min_delta: 0.005
+  batch_size: 4
+  samples: 20

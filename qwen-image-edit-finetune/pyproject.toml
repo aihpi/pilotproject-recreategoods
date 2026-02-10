@@ -1,0 +1,13 @@
+[project]
+name = "qwen-image-edit-finetune"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "diffusers>=0.36.0",
+    "dotenv>=0.9.9",
+    "lpips>=0.1.4",
+    "omegaconf>=2.3.0",
+    "pillow>=12.0.0",
+]

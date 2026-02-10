@@ -1,6 +1,6 @@
 from lightning import Trainer
-from dataloader.data_module import FLUXDataModule
-from pipelines.train_pipeline_optim import InstructPix2PixModel
+from dataloader.data_module_redux import FLUXDataModule
+from pipelines.train_redux_reverse_two import InstructPix2PixModel
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.strategies import FSDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
@@ -33,7 +33,7 @@ def main():
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     torch.cuda.set_device(local_rank)
-
+    torch.backends.cuda.matmul.allow_tf32 = True
     torch.cuda.empty_cache()
     data_config = config["data"]
     data_module = FLUXDataModule(
@@ -47,7 +47,7 @@ def main():
 
     # Initialize your FLUX model 
     model = InstructPix2PixModel(
-        args=config["model"],
+        args=config,
     )
     # Initialize WandB Logger
     wandb_logger = WandbLogger(

@@ -11,7 +11,7 @@ import torchvision.transforms.functional as F
 import torch
 from tqdm import tqdm
 from diffusers import AutoencoderKL
-from pipelines.tokenize import tokenize_prompt, encode_prompt
+from pipelines.tokenize_prompts import tokenize_prompt, encode_prompt
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
 

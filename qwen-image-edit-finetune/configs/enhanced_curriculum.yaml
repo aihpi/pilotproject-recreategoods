@@ -1,0 +1,86 @@
+# Enhanced Curriculum Training Configuration with OmegaConf Features
+# This showcases advanced OmegaConf capabilities
+
+# Base paths and interpolation
+base_data_path: "data/example_image_dataset"
+output_base: "./models/curriculum"
+
+# Dataset Configuration with interpolation
+dataset:
+  base_path: ${base_data_path}
+  metadata_path: null
+  max_pixels: 1048576
+  height: null
+  width: null
+  data_file_keys: "image,edit_image"
+  repeat: 1
+  num_workers: 8
+
+# Model Configuration
+model:
+  paths: null
+  id_with_origin_paths: "Qwen/Qwen-Image-Edit:transformer/diffusion_pytorch_model*.safetensors,Qwen/Qwen-Image:text_encoder/model*.safetensors,Qwen/Qwen-Image:vae/diffusion_pytorch_model.safetensors"
+  tokenizer_path: null
+  processor_path: null
+  trainable_models: "dit"
+
+# LoRA Configuration
+lora:
+  base_model: "dit"
+  target_modules: "to_q,to_k,to_v,add_q_proj,add_k_proj,add_v_proj,to_out.0,to_add_out,img_mlp.net.2,img_mod.1,txt_mlp.net.2,txt_mod.1"
+  rank: 16
+  checkpoint: null
+
+# Training Configuration
+training:
+  learning_rate: 5e-5
+  num_epochs: 200
+  weight_decay: 0.01
+  gradient_accumulation_steps: 1
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: false
+  find_unused_parameters: true
+  enable_fp8_training: false
+  task: "sft"
+  extra_inputs: "edit_image"
+
+# Output Configuration with interpolation
+output:
+  path: "${output_base}/Qwen-Image-Edit_adaptive_curriculum_lora_rank${lora.rank}_lr${training.learning_rate}_correct"
+  remove_prefix_in_ckpt: "pipe.dit."
+  save_steps: 1000
+
+# Curriculum Learning Configuration
+curriculum:
+  ranking_csv: "data/edit_ranking_out/ranking_dinov2_vitb14_tiers4.csv"
+  schedule: "50:1.0,0.0,0.0,0.0;50:0.8,0.2,0.0,0.0;50:0.7,0.2,0.1,0.0;50:0.6,0.2,0.1,0.1"
+  batch_size: 8
+  steps_per_epoch: 1000
+  sort_within_tier: false
+  seed: 42
+  max_epochs_per_phase: 20
+
+# Early Stopping Configuration
+early_stopping:
+  patience: 5
+  threshold: 0.001
+
+# Validation Configuration with interpolation
+validation:
+  csv_path: "${base_data_path}/validation.csv"
+  steps: 10  # Every 1/4 epoch
+  patience: 3
+  min_delta: 0.001
+  batch_size: 4
+  samples: 10
+
+# Environment specific overrides (can be used with OmegaConf's override syntax)
+defaults:
+  - _self_
+
+
+# This config demonstrates:
+# 1. Variable interpolation: ${base_data_path}
+# 2. Cross-section references: ${lora.rank}
+# 3. Complex path building with multiple variables
+# 4. Structured organization with clear sections

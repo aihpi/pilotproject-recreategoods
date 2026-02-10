@@ -1,0 +1,205 @@
+# Comprehensive OmegaConf Configuration for Qwen Image Edit Training
+# This configuration file provides a hierarchical structure for flexible parameter management
+# Compatible with OmegaConf for automatic CLI binding, type validation, and config inheritance
+
+# =============================================================================
+# MODEL CONFIGURATION
+# =============================================================================
+model:
+  # Model paths and identifiers
+  model_paths: null
+  model_id_with_origin_paths: "Qwen/Qwen-Image-Edit:transformer/diffusion_pytorch_model*.safetensors,Qwen/Qwen-Image:text_encoder/model*.safetensors,Qwen/Qwen-Image:vae/diffusion_pytorch_model.safetensors"
+  
+  # Tokenizer and processor paths
+  tokenizer_path: null
+  processor_path: null
+  
+  # Trainable models configuration
+  trainable_models: null
+  
+  # LoRA configuration
+  lora_base_model: "dit"
+  lora_target_modules: "to_q,to_k,to_v,add_q_proj,add_k_proj,add_v_proj,to_out.0,to_add_out,img_mlp.net.2,img_mod.1,txt_mlp.net.2,txt_mod.1"
+  lora_rank: 16
+  lora_checkpoint: null
+  
+  # Advanced model settings
+  use_gradient_checkpointing: true
+  use_gradient_checkpointing_offload: null
+  enable_fp8_training: null
+  task: null
+  
+  # Checkpoint management
+  remove_prefix_in_ckpt: "pipe.dit."
+
+# =============================================================================
+# DATASET CONFIGURATION
+# =============================================================================
+dataset:
+  # Dataset paths
+  base_path: "data/example_image_dataset"
+  metadata_path: "data/example_image_dataset/metadata_edit.csv"
+  
+  # Data file configuration
+  data_file_keys: "image,edit_image"
+  extra_inputs: "edit_image"
+  
+  # Dataset processing
+  repeat: 1
+  max_pixels: 1048576
+  height: null
+  width: null
+  
+  # Data loading
+  num_workers: 12
+
+# =============================================================================
+# TRAINING CONFIGURATION
+# =============================================================================
+training:
+  # Core training parameters
+  learning_rate: 5.0e-05
+  num_epochs: 2
+  weight_decay: 0.02
+  
+  # Optimization settings
+  gradient_accumulation_steps: 4
+  find_unused_parameters: true
+  
+  # Checkpoint and saving
+  save_steps: 1000
+  
+  # Scheduler configuration
+  scheduler:
+    type: "ReduceLROnPlateau"
+    mode: "min"
+    factor: 0.5
+    patience: 1000
+    threshold: 0.001
+    min_lr: 1.0e-07
+
+# =============================================================================
+# SEGMENTATION CONFIGURATION
+# =============================================================================
+segmentation:
+  # Mask loss configuration
+  mask_loss_weight: 1.0
+  
+  # Similarity-based filtering
+  similarity_threshold: 0.5
+  enable_dynamic_filtering: true
+  
+  # Mask processing
+  mask_root_dir: "segmentation"
+  mask_target_size: null
+
+# =============================================================================
+# VALIDATION CONFIGURATION
+# =============================================================================
+validation:
+  # Validation scheduling
+  steps: 500
+  samples: 4
+  
+  # Sample prediction logging
+  log_sample_predictions: true
+  
+  # Validation settings
+  num_inference_steps: 30
+  validation_seed_offset: 42
+  save_validation_images: true
+
+# =============================================================================
+# WANDB CONFIGURATION
+# =============================================================================
+wandb:
+  # Project configuration
+  project: "qwen-image-edit-segmentation"
+  entity: null
+  name: null
+  
+  # Run metadata
+  tags: ["segmentation", "lora", "qwen-image", "training"]
+  
+  # Logging settings
+  log_model_checkpoints: true
+  log_sample_predictions: true
+  log_validation_images: true
+  
+  # Advanced logging
+  watch_model: false
+  log_frequency: 10
+
+# =============================================================================
+# OUTPUT CONFIGURATION
+# =============================================================================
+output:
+  # Output paths
+  path: "./models/train/Qwen-Image-Edit_lora_segmentation_wandb"
+  
+  # Logging and saving
+  save_checkpoints: true
+  safe_serialization: true
+  
+  # Model management
+  checkpoint_naming: "step-{step:06d}.safetensors"
+  best_model_selection: false
+
+# =============================================================================
+# ADVANCED TRAINING CONFIGURATION
+# =============================================================================
+advanced_training:
+  # Memory optimization
+  gradient_checkpointing: true
+  mixed_precision: "fp16"
+  max_memory_mb: null
+  
+  # Distributed training
+  distributed_backend: "nccl"
+  find_unused_parameters: true
+  
+  # Performance optimization
+  compile_model: false
+  use_flash_attention: false
+  
+  # Custom parameters
+  validation_samples: null
+  custom_metrics: []
+
+# =============================================================================
+# SYSTEM CONFIGURATION
+# =============================================================================
+system:
+  # Environment variables
+  environment:
+    OMP_NUM_THREADS: 1
+    MKL_NUM_THREADS: 1
+    TOKENIZERS_PARALLELISM: "false"
+    NVIDIA_TF32_OVERRIDE: 1
+    NCCL_DEBUG: "warn"
+  
+  # Hardware configuration (excluded from config as requested)
+  # gpu_count, device_ids, memory_limit, etc. handled by system/HPC
+  
+  # Debugging and monitoring
+  debug_mode: false
+  log_level: "INFO"
+  enable_profiling: false
+
+# =============================================================================
+# INHERITANCE AND OVERRIDE CONFIGURATION
+# =============================================================================
+# This config can be inherited and overridden using OmegaConf's merge functionality
+# 
+# Usage examples:
+# 1. Load base config: config = OmegaConf.load('qwen_image_edit_comprehensive_config.yaml')
+# 2. Override specific parameters: OmegaConf.merge(config, override_config)
+# 3. CLI integration: OmegaConf.from_cli() for command-line overrides
+# 4. Type safety: All parameters are validated against their expected types
+# 5. Hierarchical access: config.training.learning_rate, config.wandb.project, etc.
+#
+# Configuration inheritance:
+# - Base config provides sensible defaults
+# - Environment-specific configs can override specific sections
+# - CLI arguments can override any parameter dynamically
+# - Config validation ensures type consistency and required parameters

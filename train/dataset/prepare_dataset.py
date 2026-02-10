@@ -18,11 +18,19 @@ def main():
                 valid_images = [
                     img for img in valid_images if img.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
                 ]
-                
+                status = ["filtered" for _ in range(len(valid_images))]
+                removed_dir = prompt_dir / "removed_images"
+                if removed_dir.exists() and removed_dir.is_dir():
+                    removed_images = list(removed_dir.glob("*_0.*"))
+                    removed_images = [
+                        img for img in removed_images if img.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+                    ]
+                    status.extend(["removed" for _ in range(len(removed_images))])
+                    valid_images.extend(removed_images)
                 # Only process directories that contain at least one valid image
                 if len(valid_images) > 0:
                     prompt_seeds = [image_path.name.split("_")[0] for image_path in sorted(valid_images)]
-                    seeds.append((prompt_dir.name, prompt_seeds))
+                    seeds.append((prompt_dir.name, prompt_seeds, status))
                     progress_bar.update()
     seeds.sort()
 
