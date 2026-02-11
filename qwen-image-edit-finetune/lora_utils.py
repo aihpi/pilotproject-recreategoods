@@ -179,10 +179,12 @@ class LocalQwenImageEdit:
                 try:
                     # First, try converting DiffSynth-Studio format to diffusers format
                     full_path = os.path.join(self.model_path, self.lora_name)
-                    print(f"Converting LoRA from DiffSynth-Studio format: {full_path}")
-
-                    # Convert the weights
-                    converted_path = convert_diffsynth_lora_to_diffusers(full_path)
+                    if self.lora_name.endswith("_diffusers.safetensors"):
+                        converted_path = full_path
+                        print(f"Using pre-converted LoRA weights: {converted_path}")
+                    else:
+                        print(f"Converting LoRA from DiffSynth-Studio format: {full_path}")
+                        converted_path = convert_diffsynth_lora_to_diffusers(full_path)
 
                     # Load the converted weights
                     converted_dir = os.path.dirname(converted_path)

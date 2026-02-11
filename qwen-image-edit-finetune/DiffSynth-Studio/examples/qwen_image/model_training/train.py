@@ -27,6 +27,8 @@ class QwenImageTrainingModule(DiffusionTrainingModule):
         tokenizer_config = ModelConfig(model_id="Qwen/Qwen-Image", origin_file_pattern="tokenizer/") if tokenizer_path is None else ModelConfig(tokenizer_path)
         processor_config = ModelConfig(model_id="Qwen/Qwen-Image-Edit", origin_file_pattern="processor/") if processor_path is None else ModelConfig(processor_path)
         self.pipe = QwenImagePipeline.from_pretrained(torch_dtype=torch.bfloat16, device="cpu", model_configs=model_configs, tokenizer_config=tokenizer_config, processor_config=processor_config)
+        self.pipe.dit.enable_segmentation = True
+        print("enable_segmentation:", getattr(self.pipe.dit, "enable_segmentation", None))
 
         # Training mode
         self.switch_pipe_to_training_mode(

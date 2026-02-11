@@ -461,8 +461,12 @@ class QwenImagePipeline(BasePipeline):
 
             # Inference
             noise_pred_posi = self.model_fn(**models, **inputs_shared, **inputs_posi, timestep=timestep, progress_id=progress_id)
+            if isinstance(noise_pred_posi, dict):
+                noise_pred_posi = noise_pred_posi["image_noise"]
             if cfg_scale != 1.0:
                 noise_pred_nega = self.model_fn(**models, **inputs_shared, **inputs_nega, timestep=timestep, progress_id=progress_id)
+                if isinstance(noise_pred_nega, dict):
+                    noise_pred_nega = noise_pred_nega["image_noise"]
                 noise_pred = noise_pred_nega + cfg_scale * (noise_pred_posi - noise_pred_nega)
             else:
                 noise_pred = noise_pred_posi

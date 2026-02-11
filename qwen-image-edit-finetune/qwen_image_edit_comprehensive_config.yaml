@@ -135,7 +135,7 @@ wandb:
 # =============================================================================
 output:
   # Output paths
-  path: "./models/train/Qwen-Image-Edit_lora_segmentation_wandb"
+  path: "./models/train/Qwen-Image-Edit_lora_segmentation_wandb_test"
   
   # Logging and saving
   save_checkpoints: true

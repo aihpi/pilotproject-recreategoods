@@ -1,0 +1,32 @@
+[project]
+name = "model-testing"
+version = "0.1.0"
+description = "Evaluation and inference utilities for Qwen-Image-Edit experiments."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pillow",
+]
+
+[project.optional-dependencies]
+inference = [
+  "diffusers",
+  "safetensors",
+  "torch",
+  "transformers",
+  "accelerate",
+  "peft",
+  "torchvision",
+]
+metrics = [
+  "scikit-image",
+  "lpips",
+  "torch",
+]
+clip = [
+  "open-clip-torch",
+  "torch",
+]
+
+[tool.uv]
+dev-dependencies = []

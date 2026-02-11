@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=qwen-segment-config-wandb
-#SBATCH --partition=aisc
+#SBATCH --partition=aisc-batch
 #SBATCH --account=aisc
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus=h100:4
+#SBATCH --gpus=h100:6
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
@@ -70,7 +70,7 @@ CONFIG_FILE="qwen_image_edit_comprehensive_config.yaml"
 # CLI_OVERRIDES="--training.weight_decay 0.01 --wandb.name 'lora-debug-run'"
 
 # Default CLI overrides (can be customized per experiment)
-CLI_OVERRIDES="--validation.samples 4 --log_sample_predictions"
+CLI_OVERRIDES="--validation.samples 4"
 
 # Ensure logs/output dirs exist
 mkdir -p ./models/train logs
